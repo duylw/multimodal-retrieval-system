@@ -1,0 +1,52 @@
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Data directories and heavy media (CRITICAL for Video Retrieval)
+data/raw_videos/*
+!data/raw_videos/.gitkeep
+data/keyframes/*
+!data/keyframes/.gitkeep
+data/audio_temp/*
+!data/audio_temp/.gitkeep
+data/indices/*
+!data/indices/.gitkeep
+data/checkpoints/*
+!data/checkpoints/.gitkeep
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# Ignore model weights and checkpoints
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.engine
+
+# FAISS and large index files
+*.index
+*.faiss
+
+# Logs and runtime outputs
+*.log
+logs/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

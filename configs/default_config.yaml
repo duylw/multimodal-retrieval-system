@@ -1,0 +1,59 @@
+# System Configuration for Multimodal Video Retrieval
+# Hardware Target: NVIDIA GeForce GTX 1650 (4GB VRAM), 16GB RAM, Windows OS
+
+paths:
+  raw_videos_dir: "data/raw_videos"
+  keyframes_dir: "data/keyframes"
+  audio_temp_dir: "data/audio_temp"
+  indices_dir: "data/indices"
+  metadata_db: "data/metadata.db"
+  ground_truth_file: "data/ground_truth.json"
+
+hardware:
+  device: "cuda"
+  max_vram_gb: 3.5
+  cpu_threads: 4
+
+shot_detection:
+  method: "transnetv2" # options: "transnetv2", "pyscenedetect"
+  threshold: 0.5
+  min_shot_duration_sec: 1.0
+
+keyframe_selection:
+  max_keyframes_per_shot: 6
+  blur_threshold: 80.0
+  min_brightness: 15.0
+  duplicate_similarity_threshold: 0.95
+  image_max_size: 720
+  jpeg_quality: 85
+
+visual_model:
+  primary_model: "google/siglip2-so400m-patch14-384"
+  fallback_model: "google/siglip2-base-patch16-256"
+  batch_size: 4
+  use_fp16: true
+
+speech_model:
+  whisper_model_size: "large-v3-turbo"
+  compute_type: "int8"
+  language: "vi"
+  vad_filter: true
+  min_speech_duration_ms: 250
+
+ocr_model:
+  engine: "paddleocr"
+  language: "vi"
+  use_gpu: false
+  min_confidence: 0.65
+  edge_density_threshold: 0.08
+
+retrieval:
+  top_k_candidates_per_modality: 200
+  sliding_window_size_sec: 5.0
+  sliding_window_step_sec: 2.5
+  rrf_k: 60
+  weights:
+    visual: 1.0
+    speech: 1.2
+    ocr: 1.5
+    audio: 0.8
