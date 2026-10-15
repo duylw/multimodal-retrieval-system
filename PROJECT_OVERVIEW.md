@@ -94,9 +94,15 @@ d:/UIT/TX/doan/
 ├── AGENTS.md                  # Quy chuẩn persona, luật và giới hạn phần cứng của AI
 ├── PROJECT_OVERVIEW.md        # Tài liệu tổng quan dự án (file này)
 ├── TRACKING.md                # Bảng theo dõi tiến độ từng công việc
-├── first_ideas.md             # Ý tưởng và ghi chú ban đầu
+│
+├── .agents/                   # Tùy biến và năng lực của AI Assistant
+│   └── skills/                # Các kỹ năng kỹ thuật chạy theo cơ chế Progressive Disclosure
+│       ├── video-benchmark-eval/
+│       ├── vram-safe-embedding/
+│       └── temporal-multimodal-fusion/
 │
 ├── docs/                      # Tài liệu kỹ thuật và hướng dẫn quy trình
+│   ├── GLOSSARY.md            # Từ điển thuật ngữ kỹ thuật và cơ chế các mô hình AI
 │   └── GIT_GUIDELINES.md      # Quy chuẩn Git, conventional commits, làm việc nhóm
 │
 ├── tasks/                     # Chi tiết từng gói công việc kỹ thuật

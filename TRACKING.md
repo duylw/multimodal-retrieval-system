@@ -58,6 +58,8 @@
   * Nhận diện các điểm nghẽn kỹ thuật: VRAM 4GB của GTX 1650, lệch thang đo điểm số giữa Cosine và BM25, hiện tượng xẻ đôi sự kiện trên trục thời gian.
   * Khởi tạo bộ tài liệu quy chuẩn: [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md), [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md), bảng theo dõi [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md).
   * Viết chi tiết 8 tài liệu task từ [task-00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md) đến [task-07](file:///d:/UIT/TX/doan/tasks/task-07-audio-clap.md).
+  * Bổ sung tài liệu từ điển thuật ngữ [docs/GLOSSARY.md](file:///d:/UIT/TX/doan/docs/GLOSSARY.md) và hướng dẫn Git [docs/GIT_GUIDELINES.md](file:///d:/UIT/TX/doan/docs/GIT_GUIDELINES.md).
+  * Khởi tạo 3 workspace skills (`video-benchmark-eval`, `vram-safe-embedding`, `temporal-multimodal-fusion`) và tinh gọn [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md) xuống còn 42 dòng.
 
 ---
 
