@@ -1,0 +1,64 @@
+{
+  "q01": [
+    {"video_file": "L13_V001.mp4", "start_sec": 50.0, "end_sec": 70.0, "score": 0.89},
+    {"video_file": "L13_V001.mp4", "start_sec": 10.0, "end_sec": 30.0, "score": 0.45}
+  ],
+  "q02": [
+    {"video_file": "L13_V001.mp4", "start_sec": 100.0, "end_sec": 120.0, "score": 0.75},
+    {"video_file": "L13_V001.mp4", "start_sec": 10.0, "end_sec": 30.0, "score": 0.72}
+  ],
+  "q03": [
+    {"video_file": "L13_V001.mp4", "start_sec": 12.0, "end_sec": 22.0, "score": 0.95}
+  ],
+  "q04": [
+    {"video_file": "L13_V002.mp4", "start_sec": 130.0, "end_sec": 150.0, "score": 0.84}
+  ],
+  "q05": [
+    {"video_file": "L13_V002.mp4", "start_sec": 220.0, "end_sec": 240.0, "score": 0.81}
+  ],
+  "q06": [
+    {"video_file": "L13_V002.mp4", "start_sec": 90.0, "end_sec": 105.0, "score": 0.78}
+  ],
+  "q07": [
+    {"video_file": "L13_V003.mp4", "start_sec": 40.0, "end_sec": 60.0, "score": 0.77}
+  ],
+  "q08": [
+    {"video_file": "L13_V003.mp4", "start_sec": 100.0, "end_sec": 120.0, "score": 0.85}
+  ],
+  "q09": [
+    {"video_file": "L13_V004.mp4", "start_sec": 20.0, "end_sec": 45.0, "score": 0.83}
+  ],
+  "q10": [
+    {"video_file": "L13_V004.mp4", "start_sec": 90.0, "end_sec": 110.0, "score": 0.80}
+  ],
+  "q11": [
+    {"video_file": "L13_V005.mp4", "start_sec": 145.0, "end_sec": 160.0, "score": 0.79}
+  ],
+  "q12": [
+    {"video_file": "L13_V005.mp4", "start_sec": 210.0, "end_sec": 225.0, "score": 0.76}
+  ],
+  "q13": [
+    {"video_file": "L13_V006.mp4", "start_sec": 50.0, "end_sec": 75.0, "score": 0.82}
+  ],
+  "q14": [
+    {"video_file": "L13_V006.mp4", "start_sec": 175.0, "end_sec": 190.0, "score": 0.86}
+  ],
+  "q15": [
+    {"video_file": "L13_V007.mp4", "start_sec": 70.0, "end_sec": 90.0, "score": 0.73}
+  ],
+  "q16": [
+    {"video_file": "L13_V007.mp4", "start_sec": 140.0, "end_sec": 165.0, "score": 0.81}
+  ],
+  "q17": [
+    {"video_file": "L13_V008.mp4", "start_sec": 30.0, "end_sec": 50.0, "score": 0.75}
+  ],
+  "q18": [
+    {"video_file": "L13_V008.mp4", "start_sec": 80.0, "end_sec": 95.0, "score": 0.72}
+  ],
+  "q19": [
+    {"video_file": "L13_V009.mp4", "start_sec": 20.0, "end_sec": 40.0, "score": 0.88}
+  ],
+  "q20": [
+    {"video_file": "L13_V010.mp4", "start_sec": 60.0, "end_sec": 80.0, "score": 0.80}
+  ]
+}

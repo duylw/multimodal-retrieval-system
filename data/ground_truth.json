@@ -1,0 +1,162 @@
+[
+  {
+    "query_id": "q01",
+    "query": "cận cảnh đĩa thức ăn được bày biện trên bàn",
+    "video_file": "L13_V001.mp4",
+    "target_interval": [45.0, 75.0],
+    "modality_expected": ["visual"],
+    "description": "Visual query testing close-up shot of cooked food"
+  },
+  {
+    "query_id": "q02",
+    "query": "người dẫn chương trình giới thiệu nội dung bản tin",
+    "video_file": "L13_V001.mp4",
+    "target_interval": [5.0, 35.0],
+    "modality_expected": ["speech", "visual"],
+    "description": "Multimodal speech and visual query for host introduction"
+  },
+  {
+    "query_id": "q03",
+    "query": "bảng chữ tiêu đề hiển thị tên chương trình ở góc màn hình",
+    "video_file": "L13_V001.mp4",
+    "target_interval": [10.0, 25.0],
+    "modality_expected": ["ocr"],
+    "description": "OCR on-screen title text query"
+  },
+  {
+    "query_id": "q04",
+    "query": "đoạn phỏng vấn người dân tại hiện trường",
+    "video_file": "L13_V002.mp4",
+    "target_interval": [120.0, 160.0],
+    "modality_expected": ["speech", "visual"],
+    "description": "Interview scene with speaker and microphone"
+  },
+  {
+    "query_id": "q05",
+    "query": "cảnh xe cộ di chuyển đông đúc trên đường phố ban ngày",
+    "video_file": "L13_V002.mp4",
+    "target_interval": [210.0, 250.0],
+    "modality_expected": ["visual"],
+    "description": "Outdoor traffic scene query"
+  },
+  {
+    "query_id": "q06",
+    "query": "chữ chạy phía dưới màn hình thông báo tin tức mới nhất",
+    "video_file": "L13_V002.mp4",
+    "target_interval": [80.0, 110.0],
+    "modality_expected": ["ocr"],
+    "description": "News ticker text OCR query"
+  },
+  {
+    "query_id": "q07",
+    "query": "hướng dẫn chuẩn bị nguyên liệu và tẩm ướp gia vị",
+    "video_file": "L13_V003.mp4",
+    "target_interval": [30.0, 70.0],
+    "modality_expected": ["visual", "speech"],
+    "description": "Cooking ingredient seasoning preparation"
+  },
+  {
+    "query_id": "q08",
+    "query": "đầu bếp đảo thức ăn trong chảo nóng trên bếp ga",
+    "video_file": "L13_V003.mp4",
+    "target_interval": [95.0, 130.0],
+    "modality_expected": ["visual"],
+    "description": "Stir-frying food in hot pan"
+  },
+  {
+    "query_id": "q09",
+    "query": "chuyên gia chia sẻ lời khuyên về sức khỏe và dinh dưỡng",
+    "video_file": "L13_V004.mp4",
+    "target_interval": [15.0, 50.0],
+    "modality_expected": ["speech"],
+    "description": "Health and nutritional expert advice"
+  },
+  {
+    "query_id": "q10",
+    "query": "đồ thị số liệu thống kê hiển thị phần trăm tăng trưởng",
+    "video_file": "L13_V004.mp4",
+    "target_interval": [85.0, 115.0],
+    "modality_expected": ["ocr", "visual"],
+    "description": "Statistical chart and percentage values"
+  },
+  {
+    "query_id": "q11",
+    "query": "tiếng còi xe hú báo động khi xe cứu thương chạy qua",
+    "video_file": "L13_V005.mp4",
+    "target_interval": [140.0, 165.0],
+    "modality_expected": ["audio", "visual"],
+    "description": "Emergency siren audio event"
+  },
+  {
+    "query_id": "q12",
+    "query": "toàn cảnh tòa nhà làm việc nhìn từ trên cao",
+    "video_file": "L13_V005.mp4",
+    "target_interval": [200.0, 230.0],
+    "modality_expected": ["visual"],
+    "description": "Aerial panoramic drone view of building"
+  },
+  {
+    "query_id": "q13",
+    "query": "phát biểu chỉ đạo hội nghị của lãnh đạo",
+    "video_file": "L13_V006.mp4",
+    "target_interval": [40.0, 85.0],
+    "modality_expected": ["speech"],
+    "description": "Conference keynote speech"
+  },
+  {
+    "query_id": "q14",
+    "query": "khán giả vỗ tay tán thưởng sau tiết mục biểu diễn",
+    "video_file": "L13_V006.mp4",
+    "target_interval": [170.0, 195.0],
+    "modality_expected": ["audio", "visual"],
+    "description": "Audience applause and cheering"
+  },
+  {
+    "query_id": "q15",
+    "query": "cảnh thu hoạch nông sản tươi tại vườn",
+    "video_file": "L13_V007.mp4",
+    "target_interval": [60.0, 100.0],
+    "modality_expected": ["visual"],
+    "description": "Agricultural harvesting in field"
+  },
+  {
+    "query_id": "q16",
+    "query": "giải thích công nghệ sản xuất hiện đại",
+    "video_file": "L13_V007.mp4",
+    "target_interval": [130.0, 175.0],
+    "modality_expected": ["speech"],
+    "description": "Explaining modern production technology"
+  },
+  {
+    "query_id": "q17",
+    "query": "biển hiệu cửa hàng có ghi số điện thoại liên hệ",
+    "video_file": "L13_V008.mp4",
+    "target_interval": [25.0, 55.0],
+    "modality_expected": ["ocr"],
+    "description": "Store signboard with phone number"
+  },
+  {
+    "query_id": "q18",
+    "query": "người thợ thực hiện thao tác cắt gọt tỉ mỉ",
+    "video_file": "L13_V008.mp4",
+    "target_interval": [70.0, 105.0],
+    "modality_expected": ["visual"],
+    "description": "Artisan cutting and crafting"
+  },
+  {
+    "query_id": "q19",
+    "query": "bản tin dự báo thời tiết với bản đồ nhiệt độ các vùng",
+    "video_file": "L13_V009.mp4",
+    "target_interval": [10.0, 45.0],
+    "modality_expected": ["visual", "ocr", "speech"],
+    "description": "Weather forecast with temperature map"
+  },
+  {
+    "query_id": "q20",
+    "query": "hình ảnh flycam bay qua cánh đồng lúa xanh",
+    "video_file": "L13_V010.mp4",
+    "target_interval": [50.0, 90.0],
+    "modality_expected": ["visual"],
+    "description": "Flycam shot over green rice fields"
+  }
+]
