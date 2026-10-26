@@ -10,6 +10,9 @@ let state = {
     activeShotId: null,
     totalDuration: 0,
     isUserInteracting: false,
+    searchResults: [],
+    activeTab: "shots",
+    activeCandidateRank: null,
 };
 
 // DOM Elements
@@ -32,6 +35,18 @@ const chkAutoScroll = document.getElementById("chkAutoScroll");
 const btnPrevShot = document.getElementById("btnPrevShot");
 const btnNextShot = document.getElementById("btnNextShot");
 const btnJumpCenter = document.getElementById("btnJumpCenter");
+
+// Visual Search DOM Elements
+const searchForm = document.getElementById("searchForm");
+const queryInput = document.getElementById("queryInput");
+const btnClearQuery = document.getElementById("btnClearQuery");
+const btnSearch = document.getElementById("btnSearch");
+const tabShots = document.getElementById("tabShots");
+const tabResults = document.getElementById("tabResults");
+const tabShotCount = document.getElementById("tabShotCount");
+const tabResultCount = document.getElementById("tabResultCount");
+const shotControls = document.getElementById("shotControls");
+const candidateList = document.getElementById("candidateList");
 
 /**
  * Formats seconds into MM:SS.ss string.
@@ -105,6 +120,7 @@ async function loadVideo(videoId) {
         statFps.textContent = data.video.fps.toFixed(1);
         statShots.textContent = data.total_shots;
         statKeyframes.textContent = data.total_keyframes;
+        if (tabShotCount) tabShotCount.textContent = data.total_shots;
 
         // Update Video Player Source
         videoPlayer.src = `/api/stream/${videoId}`;
@@ -400,6 +416,159 @@ function jumpCurrentCenter() {
 }
 
 /**
+ * Switches right pane view between 'shots' and 'results'.
+ */
+function switchTab(tabName) {
+    state.activeTab = tabName;
+    if (tabName === "shots") {
+        tabShots.classList.add("active");
+        tabResults.classList.remove("active");
+        shotControls.style.display = "flex";
+        shotList.style.display = "flex";
+        candidateList.style.display = "none";
+    } else {
+        tabShots.classList.remove("active");
+        tabResults.classList.add("active");
+        shotControls.style.display = "none";
+        shotList.style.display = "none";
+        candidateList.style.display = "flex";
+    }
+}
+
+/**
+ * Executes visual search via SigLIP2 + FAISS backend.
+ */
+async function executeVisualSearch() {
+    const query = queryInput.value.trim();
+    if (!query) return;
+
+    btnSearch.disabled = true;
+    btnSearch.textContent = "Searching...";
+    btnClearQuery.style.display = "block";
+    switchTab("results");
+
+    candidateList.innerHTML = `
+        <div class="loading-state">
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text-main);">
+                Encoding query &amp; searching FAISS index...
+            </div>
+            <div style="color: var(--accent); font-family: var(--font-mono); font-size: 13px;">
+                "${query}"
+            </div>
+        </div>
+    `;
+
+    try {
+        const vidParam = state.currentVideoId ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
+        const res = await fetch(`/api/search/visual?query=${encodeURIComponent(query)}${vidParam}&top_k=25`);
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || "Search request failed");
+        }
+
+        const data = await res.json();
+        state.searchResults = data.candidates || [];
+        tabResultCount.textContent = state.searchResults.length;
+        renderCandidateCards();
+
+    } catch (err) {
+        console.error("Visual search error:", err);
+        candidateList.innerHTML = `<div class="empty-candidate-state" style="color: var(--color-short);">Error during visual search: ${err.message}</div>`;
+    } finally {
+        btnSearch.disabled = false;
+        btnSearch.textContent = "Search";
+    }
+}
+
+/**
+ * Renders ranked candidate cards in the right pane.
+ */
+function renderCandidateCards() {
+    if (state.searchResults.length === 0) {
+        candidateList.innerHTML = '<div class="empty-candidate-state">No matching visual moments found for this query.</div>';
+        return;
+    }
+
+    candidateList.innerHTML = "";
+
+    state.searchResults.forEach(c => {
+        const card = document.createElement("div");
+        card.className = "candidate-card";
+        card.id = `candidate-${c.rank}`;
+        if (state.activeCandidateRank === c.rank) {
+            card.classList.add("active");
+        }
+
+        // Rank badge styling
+        let rankClass = "";
+        if (c.rank === 1) rankClass = "top-1";
+        else if (c.rank === 2) rankClass = "top-2";
+        else if (c.rank === 3) rankClass = "top-3";
+
+        // Thumbnail element
+        let thumbHtml = "";
+        if (c.thumbnail_url) {
+            thumbHtml = `<img src="${c.thumbnail_url}" alt="Rank ${c.rank}" loading="lazy">`;
+        } else {
+            thumbHtml = `<span class="candidate-thumb-placeholder">Shot #${c.shot_id}</span>`;
+        }
+
+        // Type badge
+        const typeClass = c.is_shot_pooled ? "pooled" : "keyframe";
+        const typeLabel = c.is_shot_pooled ? "Shot Pooled" : "Keyframe";
+
+        card.innerHTML = `
+            <div class="candidate-thumb-box">
+                <span class="candidate-rank-pill ${rankClass}">#${c.rank}</span>
+                ${thumbHtml}
+            </div>
+            <div class="candidate-content">
+                <div class="candidate-row-top">
+                    <div class="candidate-title">Shot #${String(c.shot_id).padStart(3, "0")}</div>
+                    <div class="candidate-score-pill">Score: ${c.score.toFixed(4)}</div>
+                </div>
+                <div class="candidate-row-bottom">
+                    <div class="candidate-time">${c.formatted_time} <span style="color: var(--text-dim); font-size: 11px;">[${c.start_sec.toFixed(1)}s - ${c.end_sec.toFixed(1)}s]</span></div>
+                    <span class="candidate-type-badge ${typeClass}">${typeLabel}</span>
+                </div>
+            </div>
+        `;
+
+        card.addEventListener("click", () => {
+            seekVideoTo(c.timestamp_sec);
+            highlightCandidateCard(c.rank);
+        });
+
+        candidateList.appendChild(card);
+    });
+}
+
+/**
+ * Highlights a candidate card by rank.
+ */
+function highlightCandidateCard(rank) {
+    state.activeCandidateRank = rank;
+    document.querySelectorAll(".candidate-card").forEach(el => el.classList.remove("active"));
+    const activeCard = document.getElementById(`candidate-${rank}`);
+    if (activeCard) {
+        activeCard.classList.add("active");
+        activeCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+}
+
+/**
+ * Clears search and restores Shot Inspector view.
+ */
+function clearVisualSearch() {
+    queryInput.value = "";
+    btnClearQuery.style.display = "none";
+    state.searchResults = [];
+    state.activeCandidateRank = null;
+    tabResultCount.textContent = "0";
+    switchTab("shots");
+}
+
+/**
  * Sets up all UI event handlers.
  */
 function setupEventListeners() {
@@ -421,7 +590,7 @@ function setupEventListeners() {
         }
     });
 
-    // Filtering & Search
+    // Filtering & Search for shots
     shotSearch.addEventListener("input", renderShotCards);
     shotFilter.addEventListener("change", renderShotCards);
 
@@ -433,6 +602,20 @@ function setupEventListeners() {
     btnPrevShot.addEventListener("click", jumpPrevShot);
     btnNextShot.addEventListener("click", jumpNextShot);
     btnJumpCenter.addEventListener("click", jumpCurrentCenter);
+
+    // Visual Search handlers
+    searchForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        executeVisualSearch();
+    });
+
+    queryInput.addEventListener("input", () => {
+        btnClearQuery.style.display = queryInput.value.trim() ? "block" : "none";
+    });
+
+    btnClearQuery.addEventListener("click", clearVisualSearch);
+    tabShots.addEventListener("click", () => switchTab("shots"));
+    tabResults.addEventListener("click", () => switchTab("results"));
 }
 
 // Start app

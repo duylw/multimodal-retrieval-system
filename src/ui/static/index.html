@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <!-- Top Header Bar -->
@@ -93,11 +93,29 @@
             </div>
         </section>
 
-        <!-- Right Pane: Shot & Keyframe List -->
+        <!-- Right Pane: Shot & Keyframe List / Ranked Candidates -->
         <section class="inspector-pane">
-            <div class="inspector-controls">
+            <!-- Visual Search Bar -->
+            <div class="search-query-container">
+                <form id="searchForm" class="search-query-form" onsubmit="event.preventDefault();">
+                    <div class="search-query-input-wrap">
+                        <span class="search-query-icon">&#128269;</span>
+                        <input type="text" id="queryInput" placeholder="Search moments (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...">
+                        <button type="button" id="btnClearQuery" class="btn-clear-query" title="Clear query" style="display: none;">&#10005;</button>
+                    </div>
+                    <button type="submit" id="btnSearch" class="btn-search-submit">Search</button>
+                </form>
+            </div>
+
+            <!-- View Switcher Tabs -->
+            <div class="pane-mode-tabs">
+                <button type="button" class="tab-btn active" id="tabShots">Shots &amp; Keyframes (<span id="tabShotCount">--</span>)</button>
+                <button type="button" class="tab-btn" id="tabResults">Ranked Candidates (<span id="tabResultCount">0</span>)</button>
+            </div>
+
+            <div class="inspector-controls" id="shotControls">
                 <div class="search-box">
-                    <input type="text" id="shotSearch" placeholder="Search Shot ID (e.g. 15)...">
+                    <input type="text" id="shotSearch" placeholder="Filter Shot ID (e.g. 15)...">
                 </div>
                 <div class="filter-box">
                     <select id="shotFilter">
@@ -111,14 +129,19 @@
                 <div class="auto-scroll-toggle">
                     <label>
                         <input type="checkbox" id="chkAutoScroll" checked>
-                        <span>Auto-scroll with video</span>
+                        <span>Auto-scroll</span>
                     </label>
                 </div>
             </div>
 
-            <!-- Scrollable Cards Container -->
+            <!-- Scrollable Cards Container for Shots -->
             <div class="shot-list" id="shotList">
                 <div class="loading-state" id="loadingState">Loading shot metadata and keyframes...</div>
+            </div>
+
+            <!-- Scrollable Cards Container for Ranked Search Candidates -->
+            <div class="candidate-list" id="candidateList" style="display: none;">
+                <div class="empty-candidate-state" id="emptyCandidateState">Enter a natural language query above and click Search to retrieve top-ranked moments.</div>
             </div>
         </section>
     </main>
@@ -126,6 +149,6 @@
     <!-- Tooltip Element for Timeline -->
     <div class="timeline-tooltip" id="timelineTooltip"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>

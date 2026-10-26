@@ -208,6 +208,112 @@ def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
     return FileResponse(path=str(img_path), media_type="image/jpeg")
 
 
+# Global lazy-loaded search components
+_vector_index: Optional[Any] = None
+_visual_extractor: Optional[Any] = None
+
+
+@app.get("/api/search/visual")
+def search_visual(
+    query: str,
+    video_id: Optional[str] = None,
+    top_k: int = 20
+) -> Dict[str, Any]:
+    """Searches visual index using natural language text query via SigLIP2."""
+    global _vector_index, _visual_extractor
+
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Query string cannot be empty.")
+
+    index_path = Path("data/indices/visual_siglip2.index")
+    metadata_path = Path("data/indices/visual_siglip2.json")
+    if not index_path.exists() or not metadata_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="FAISS index not found. Run Task 02 pipeline first to build index."
+        )
+
+    # Lazy-load vector index
+    if _vector_index is None:
+        from src.indexers.vector_index import VectorIndex
+        _vector_index = VectorIndex({}, embedding_dim=1152)
+        _vector_index.load(str(index_path), str(metadata_path))
+
+    # Lazy-load visual extractor for text embedding
+    if _visual_extractor is None:
+        from src.extractors.visual import VisualExtractor
+        _visual_extractor = VisualExtractor()
+        _visual_extractor.load_model()
+
+    q_vec = _visual_extractor.extract_text_embedding(query.strip())
+    raw_results = _vector_index.search(q_vec, top_k=100)
+
+    db = get_db()
+    kf_cache: Dict[str, List[Any]] = {}
+
+    candidates = []
+    rank = 1
+    for r in raw_results:
+        vid = r.get("video_id")
+        if video_id and vid != video_id:
+            continue
+
+        if vid not in kf_cache:
+            kf_cache[vid] = db.get_keyframes(vid)
+
+        # Resolve thumbnail image URL
+        thumb_url = None
+        if r.get("is_shot_pooled"):
+            shot_id = r.get("shot_id")
+            shot_kfs = [k for k in kf_cache[vid] if k.shot_id == shot_id]
+            center_kf = next((k for k in shot_kfs if k.is_shot_center), (shot_kfs[0] if shot_kfs else None))
+            if center_kf:
+                thumb_url = f"/api/keyframes/{vid}/{Path(center_kf.file_path).name}"
+        else:
+            file_path = r.get("file_path")
+            if file_path:
+                thumb_url = f"/api/keyframes/{vid}/{Path(file_path).name}"
+
+        ts = float(r.get("timestamp_sec", 0.0))
+        mins = int(ts // 60)
+        secs = ts % 60
+        formatted_time = f"{mins:02d}:{secs:05.2f}"
+
+        candidates.append({
+            "rank": rank,
+            "score": round(float(r.get("score", 0.0)), 4),
+            "video_id": vid,
+            "shot_id": r.get("shot_id"),
+            "keyframe_id": r.get("keyframe_id"),
+            "timestamp_sec": round(ts, 2),
+            "start_sec": round(float(r.get("start_sec", ts)), 2),
+            "end_sec": round(float(r.get("end_sec", ts)), 2),
+            "is_shot_pooled": r.get("is_shot_pooled", False),
+            "thumbnail_url": thumb_url,
+            "formatted_time": formatted_time,
+        })
+        rank += 1
+        if len(candidates) >= top_k:
+            break
+
+    return {
+        "query": query,
+        "video_id": video_id,
+        "total_results": len(candidates),
+        "candidates": candidates,
+    }
+
+
+@app.post("/api/search/unload")
+def unload_search_model() -> Dict[str, str]:
+    """Releases SigLIP2 model from GPU VRAM."""
+    global _visual_extractor
+    if _visual_extractor is not None:
+        _visual_extractor.safe_unload()
+        _visual_extractor = None
+    return {"status": "ok", "message": "GPU VRAM released"}
+
+
 # Mount static files and root SPA route
 if (STATIC_DIR / "index.html").exists():
     @app.get("/")
