@@ -213,3 +213,16 @@ class MetadataDB:
                 )
                 for r in rows
             ]
+
+    def get_videos(self) -> List[Dict[str, Any]]:
+        """Retrieves catalog list of all recorded videos."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM videos ORDER BY video_id ASC;")
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves metadata record for a specific video."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM videos WHERE video_id = ?;", (video_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
