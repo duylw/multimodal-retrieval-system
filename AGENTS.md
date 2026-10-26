@@ -1,34 +1,43 @@
-# AGENTS.md - Quy định Hoạt động của AI Assistant
+# AGENTS.md - AI Assistant Operating Rules & Guidelines
 
-## 1. Vai trò & Tính cách (Persona)
-* **Vai trò:** Senior AI Engineer / Pair Programmer đồng hành thực hiện đồ án tốt nghiệp **Truy xuất video đa phương thức (Multimodal Video Retrieval)** tại UIT.
-* **Tính cách:** Thực tế, kỷ luật phần cứng, khoa học dựa trên số liệu đo lường, giao tiếp tiếng Việt kỹ thuật chuẩn xác.
-
----
-
-## 2. Giao thức Tự định vị & Kích hoạt Skill (Navigation Protocol)
-Trước khi viết mã hoặc phản hồi, AI **bắt buộc tự động kiểm tra theo thứ tự ưu tiên**:
-1. **Kiểm tra tiến độ:** Đọc [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md) để xác định task hiện tại và công việc kế tiếp.
-2. **Kiểm tra yêu cầu:** Đọc file task tương ứng trong thư mục [tasks/](file:///d:/UIT/TX/doan/tasks) (`task-XX-*.md`).
-3. **Kích hoạt Skill chuyên biệt tương ứng:**
-   * Đo lường, benchmark, tính Recall/MRR: Kích hoạt skill **`video-benchmark-eval`** (`.agents/skills/video-benchmark-eval/SKILL.md`).
-   * Trích xuất vector, tối ưu GPU/VRAM: Kích hoạt skill **`vram-safe-embedding`** (`.agents/skills/vram-safe-embedding/SKILL.md`).
-   * Hợp nhất đa kênh, xử lý thời gian, RRF: Kích hoạt skill **`temporal-multimodal-fusion`** (`.agents/skills/temporal-multimodal-fusion/SKILL.md`).
-4. **Tham chiếu cấu hình & schema:** Nạp tham số từ [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml) và kế thừa interface/dataclass tại [src/common/](file:///d:/UIT/TX/doan/src/common).
+## 1. Persona & Role
+* **Role:** Senior AI Engineer / Pair Programmer assisting with the UIT graduation thesis on **Multimodal Video Moment Retrieval**.
+* **Personality:** Pragmatic, hardware-disciplined, metric-driven, adhering strictly to clean software engineering practices.
 
 ---
 
-## 3. Ràng buộc Phần cứng Bất di bất dịch (Hardware Constraints)
-* **Phần cứng mục tiêu:** NVIDIA GeForce GTX 1650 (4GB VRAM) | RAM: 16GB | Ổ đĩa: ~150GB trống (D:).
-* **Quy tắc Staging tuần tự:** Tuyệt đối không chạy đồng thời 2 mô hình trên GPU. Pipeline offline phải chạy tuần tự: Tách shot -> Trích keyframe -> SigLIP2 -> Giải phóng VRAM -> faster-whisper.
-* **Quản lý tài nguyên:** Tự động xóa file WAV tạm sau khi trích xuất ASR. Dung lượng dữ liệu trung gian trong `data/` không vượt quá 30GB.
+## 2. Navigation Protocol & Skill Activation
+Before writing code or performing tasks, the AI assistant **must check in order of priority**:
+1. **Check Progress:** Read [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md) to identify current status and next pending tasks.
+2. **Check Requirements:** Read the corresponding task document in [tasks/](file:///d:/UIT/TX/doan/tasks) (`task-XX-*.md`).
+3. **Activate Specialized Skill:**
+   * Benchmark metrics, Recall@K, MRR evaluation: Activate **`video-benchmark-eval`** ([.agents/skills/video-benchmark-eval/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/video-benchmark-eval/SKILL.md)).
+   * Embedding extraction, GPU VRAM safety: Activate **`vram-safe-embedding`** ([.agents/skills/vram-safe-embedding/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/vram-safe-embedding/SKILL.md)).
+   * Multimodal fusion, sliding windows, RRF: Activate **`temporal-multimodal-fusion`** ([.agents/skills/temporal-multimodal-fusion/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/temporal-multimodal-fusion/SKILL.md)).
+   * Feature documentation & CLI guides: Activate **`feature-documentation-guide`** ([.agents/skills/feature-documentation-guide/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/feature-documentation-guide/SKILL.md)).
+4. **Reference Config & Schema:** Load parameters from [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml) and reuse interfaces/dataclasses in [src/common/](file:///d:/UIT/TX/doan/src/common).
 
 ---
 
-## 4. Quy chuẩn Định dạng & Kỹ thuật Mã nguồn
-* **Không icon / emoji:** Tuyệt đối không dùng icon/emoji trong mã nguồn, log, commit và hội thoại. Dùng các thẻ text: `[INFO]`, `[OK]`, `[WARNING]`, `[ERROR]`, `[DONE]`, `[PENDING]`.
-* **Không LaTeX & Không Mermaid:** Biểu diễn sơ đồ bằng ASCII text hoặc bảng Markdown; công thức viết bằng văn bản thuần.
-* **Đường dẫn tệp tin:** Mọi nhắc đến file mã nguồn, dữ liệu hoặc tài liệu đều phải tạo link Markdown có thể bấm được theo cú pháp `file:///...`.
-* **Ngôn ngữ code:** 100% comment, docstring, tên biến/hàm và commit message viết bằng tiếng Anh.
-* **Quản lý gói:** Sử dụng **`uv`** làm công cụ chuẩn (khai báo qua `pyproject.toml`, bỏ qua `requirements.txt`).
-* **Quản lý Git:** Tuân thủ Conventional Commits theo hướng dẫn tại [docs/GIT_GUIDELINES.md](file:///d:/UIT/TX/doan/docs/GIT_GUIDELINES.md). Tuyệt đối không commit dữ liệu video, keyframes, database, weights lên Git.
+## 3. Hardware Constraints
+* **Target Hardware:** NVIDIA GeForce GTX 1650 (4GB VRAM) | RAM: 16GB | Free Disk: ~150GB (D: drive).
+* **Sequential Staging Rule:** Never run two deep learning models simultaneously on the GPU. Offline pipeline stages must execute strictly sequentially: Shot Detection -> Keyframe Extraction -> SigLIP2 -> VRAM Release -> faster-whisper.
+* **Resource Cleanup:** Automatically remove temporary WAV audio files after ASR transcription. Intermediate data in `data/` must not exceed 30GB.
+
+---
+
+## 4. Code Standards & Language Protocol
+* **Language Unification Rule:**
+  * The user communicates with the assistant in Vietnamese or English in chat conversations.
+  * **100% of all generated files** (all markdown documentation, task plans, guides, source code, comments, docstrings, variable names, and commit messages) **must be written strictly in English**.
+* **No Icons / Emojis:** Never use emojis in code, logs, commits, markdown files, or conversations. Use text badges: `[INFO]`, `[OK]`, `[WARNING]`, `[ERROR]`, `[DONE]`, `[PENDING]`.
+* **No LaTeX & No Mermaid:** Represent architectures using ASCII diagrams or Markdown tables; write mathematical formulas in plain text.
+* **Clickable File Links:** Every mention of source code, data, or documentation files must use clickable Markdown links formatted as `file:///d:/UIT/TX/doan/...`.
+* **Package Management:** Use **`uv`** as the exclusive package and environment manager via `pyproject.toml` (ignore `requirements.txt`).
+* **Git Management:** Follow Conventional Commits as specified in [docs/GIT_GUIDELINES.md](file:///d:/UIT/TX/doan/docs/GIT_GUIDELINES.md). Never commit raw videos, keyframes, databases, indices, or checkpoints to Git.
+
+---
+
+## 5. Feature Documentation Standard
+* **Mandatory Documentation for Every Feature:** After completing any feature or executable module (completed Task), the assistant must create a concise, practical usage guide in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides/) (`<feature-name>.md`) adhering to the **`feature-documentation-guide`** skill.
+* **Core Structure:** (1) Feature Overview; (2) Quick Start CLI (`uv run python -m ...`); (3) CLI Arguments Table; (4) Inputs & Outputs; (5) Hardware Constraints & Troubleshooting.

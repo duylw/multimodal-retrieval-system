@@ -1,88 +1,90 @@
-# Task 01B: Giao diện Debug & Trực quan hóa Cảnh quay và Keyframe (Shot & Keyframe Inspection UI)
+# Task 01B: Shot & Keyframe Debug Inspector Web UI
 
-## 1. Mục tiêu (What)
-* Xây dựng một giao diện web nội bộ (Internal Debug Web UI) gọn nhẹ, trực quan, phục vụ mục đích kiểm tra, gỡ lỗi và đánh giá chất lượng phân đoạn video:
-  * **Chọn video:** Cho phép lựa chọn bất kỳ video nào đã qua tiền xử lý trong cơ sở dữ liệu `metadata.db`.
-  * **Phát video với Range 206:** Tải trực tiếp file video gốc từ máy tính (`data/raw_videos/{video_id}.mp4`), hỗ trợ tua mượt theo từng khung hình và mốc giây.
-  * **Trực quan hóa Dòng thời gian Cảnh quay (Interactive Shot Timeline):** Hiển thị thanh tiến trình video phân mảnh theo các shot với màu sắc phân biệt, cho biết shot bắt đầu từ đâu, kết thúc khi nào và độ dài bao nhiêu giây.
-  * **Hiển thị Keyframe trong từng Shot:** Liệt kê đầy đủ các keyframe thuộc về từng shot kèm ảnh thumbnail, mốc giây (`timestamp_sec`), nhãn trích xuất (`Center` hay `Dynamic`), và độ nét Laplacian (`blur_score`).
-  * **Đồng bộ hai chiều (Two-Way Synchronization):**
-    * Click vào một shot trên timeline hoặc danh sách -> Video tự động nhảy đến `start_sec` của shot đó.
-    * Click vào một keyframe thumbnail -> Video tự động nhảy đến đúng `timestamp_sec` của keyframe đó.
-    * Khi video đang phát (Play) -> Shot và Keyframe tương ứng với thời điểm hiện tại sẽ tự động được làm nổi bật (Highlight) và cuộn vào tầm nhìn (Auto-scroll).
-* Đảm bảo tiêu tốn **0MB VRAM** (hoạt động thuần túy trên CPU/RAM thông qua Web Server chuẩn) để không ảnh hưởng đến phần cứng GTX 1650.
+## 1. Objectives (What)
+* Build a lightweight, local web-based debugging and inspection tool for verifying video shot segmentation and adaptive keyframe extraction:
+  * **Video Selection:** Dynamically list all processed videos cataloged in SQLite `metadata.db`.
+  * **Video Playback with HTTP 206 Range Requests:** Stream local raw video files (`data/raw_videos/{video_id}.mp4`) with smooth, instant seeking across frames and seconds without loading the entire video into RAM.
+  * **Interactive Shot Boundary Timeline:** Render a proportional timeline representing video duration with color-coded shot segments, displaying exact start/end timestamps and durations on hover.
+  * **Shot & Keyframe Inspection Cards:** Display all keyframes nested within their respective shots, accompanied by thumbnails, timestamps (`timestamp_sec`), classification tags (`Center` vs `Dynamic`), and Laplacian blur variance scores.
+  * **Two-Way Synchronization:**
+    * Clicking a shot segment on the timeline or card header jumps video playback to the shot's start timestamp.
+    * Clicking a keyframe thumbnail jumps video playback directly to that keyframe's exact timestamp.
+    * During playback, the timeline scrubber tracks current time, the active shot card highlights with a glowing border, and the list scrolls smoothly within its isolated container.
+* Guarantee **0MB GPU VRAM** usage (operates purely on CPU and system RAM via a standard ASGI web server) to keep the GTX 1650 completely free.
 
 ---
 
-## 2. Kiến trúc & Thiết kế Kỹ thuật (How)
+## 2. Technical Architecture & Design (How)
 
-### 2.1. Backend Server (`src/ui/debug_server.py`)
-Sử dụng **FastAPI** cùng `uvicorn` để cung cấp các API RESTful tốc độ cao:
-* `GET /api/videos`: Truy vấn bảng `videos` và `checkpoints` từ `metadata.db` để trả về danh sách các video đã hoàn thành phân đoạn shot.
-* `GET /api/videos/{video_id}/shots`: Truy vấn bảng `shots` và `keyframes`, gom nhóm theo cấu trúc:
+### 2.1. Backend Server ([src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py))
+Utilizes **FastAPI** with `uvicorn` to provide high-performance RESTful APIs:
+* `GET /api/videos`: Queries `videos` and `checkpoints` tables from `metadata.db` to return cataloged videos with shot and keyframe counts.
+* `GET /api/videos/{video_id}`: Queries `shots` and `keyframes` tables, returning a structured JSON hierarchy:
   ```json
-  [
-    {
-      "shot_id": 1,
-      "start_sec": 0.0,
-      "end_sec": 16.6,
-      "duration_sec": 16.6,
-      "keyframes": [
-        {"keyframe_id": 1, "timestamp_sec": 3.32, "is_center": false, "blur_score": 417.7, "image_url": "/api/keyframes/L13_V001/shot_0001_t0003.32.jpg"},
-        {"keyframe_id": 2, "timestamp_sec": 6.64, "is_center": true, "blur_score": 606.6, "image_url": "/api/keyframes/L13_V001/shot_0001_t0006.64.jpg"}
-      ]
-    }
-  ]
+  {
+    "video": {"video_id": "L13_V001", "duration_sec": 1133.0, "fps": 25.0},
+    "total_shots": 292,
+    "total_keyframes": 344,
+    "shots": [
+      {
+        "shot_id": 1,
+        "start_sec": 0.0,
+        "end_sec": 16.6,
+        "duration_sec": 16.6,
+        "keyframes": [
+          {"keyframe_id": "kf_0001", "timestamp_sec": 3.32, "is_shot_center": false, "blur_score": 417.7, "image_url": "/api/keyframes/L13_V001/shot_0001_t0003.32.jpg"},
+          {"keyframe_id": "kf_0002", "timestamp_sec": 6.64, "is_shot_center": true, "blur_score": 606.6, "image_url": "/api/keyframes/L13_V001/shot_0001_t0006.64.jpg"}
+        ]
+      }
+    ]
+  }
   ```
-* `GET /api/stream/{video_id}`: Stream tệp video gốc `.mp4` từ `data/raw_videos/` có xử lý HTTP Header `Range` (HTTP 206 Partial Content), cho phép trình duyệt tua tức thì mà không cần nạp toàn bộ video dung lượng lớn vào RAM.
-* `GET /api/keyframes/{video_id}/{filename}`: Phục vụ tệp ảnh keyframe trực tiếp từ `data/keyframes/{video_id}/`.
-* `GET /`: Phục vụ tệp HTML Single-Page Application (SPA).
+* `GET /api/stream/{video_id}`: Streams local MP4 files supporting HTTP `Range` header requests (`HTTP 206 Partial Content`), delivering 64KB chunks on demand.
+* `GET /api/keyframes/{video_id}/{filename}`: Serves static keyframe JPEG images.
+* `GET /`: Serves the Single-Page Application (SPA) HTML.
 
-### 2.2. Frontend Web Interface (`src/ui/templates/debug.html` & `src/ui/static/`)
-Xây dựng bằng HTML5, CSS3 (Dark Theme chuẩn) và Vanilla JavaScript:
-* **Header Bar:**
-  * Dropdown chọn Video ID (`L13_V001`, `L13_V002`, ...).
-  * Thẻ tóm tắt thông số: Tổng số Shot, Tổng số Keyframe, Thời lượng (Duration), Tốc độ khung hình (FPS).
-* **Main Left Pane (Khu vực Trình phát & Dòng thời gian):**
-  * Video Player HTML5 với thanh điều khiển mượt mà.
-  * **Interactive Shot Bar (Mini Timeline):** Nằm ngay dưới video, chia tỷ lệ chiều rộng theo tổng thời lượng video. Mỗi shot là một block màu, khi rê chuột hiển thị thông tin tooltip, khi click sẽ tua video tới vị trí shot.
-  * Bộ nút điều hướng nhanh: `[|<< Shot Trước]` `[Shot Tiếp Theo >>]` `[Nhảy đến Keyframe Chính]`.
-* **Main Right Pane (Danh sách Thẻ Shot & Keyframe cuộn được):**
-  * Danh sách phân trang hoặc cuộn vô tận các Shot cards.
-  * Thẻ Shot hiển thị: `Shot #{id}: {start_sec}s - {end_sec}s ({duration_sec}s)`.
-  * Lưới thu nhỏ chứa các Keyframe của shot đó kèm nhãn `CENTER` hoặc `SAMPLE` và điểm độ nét `blur`.
-  * Trạng thái `is-active`: Khi video đang phát đến mốc giây nằm trong shot nào, thẻ shot đó sẽ phát sáng viền và tự động cuộn vào giữa màn hình.
+### 2.2. Frontend Architecture ([src/ui/static/](file:///d:/UIT/TX/doan/src/ui/static/))
+Built with semantic HTML5, Vanilla CSS3 (Dark Mode), and modern JavaScript:
+* **Header Bar:** Video selector dropdown, duration badge, FPS, total shots count, total keyframes count.
+* **Left Pane (Video Player & Interactive Timeline):**
+  * HTML5 video element with responsive 16:9 aspect ratio.
+  * Real-time playback timestamp display and active shot indicator badge.
+  * Quick navigation buttons: `[Prev Shot]`, `[Next Shot]`, `[Jump Center Keyframe]`.
+  * Interactive shot boundary timeline with hover tooltips and live progress scrubber.
+* **Right Pane (Shot & Keyframe Inspector):**
+  * Fixed-height container with isolated scrollbar (`overflow-y: auto`), preventing outer window dragging.
+  * Search filter by shot ID and duration category (`<3s`, `3-8s`, `>8s`, `multi-kf`).
+  * Smooth container-isolated auto-scroll (`shotList.scrollTo`) syncing with video playback.
 
 ---
 
-## 3. Sơ đồ Luồng Hoạt động (ASCII Diagram)
+## 3. Data Flow Diagram (ASCII)
 
 ```
-[Trình duyệt Web (Local Browser)]
+[Local Web Browser]
        │
-       ├─► (1) GET /api/videos ──────────► [FastAPI Server] ──► [metadata.db] (Đọc video đã xử lý)
+       ├─► (1) GET /api/videos ──────────► [FastAPI Server] ──► [metadata.db] (Read catalog)
        │
-       ├─► (2) GET /api/videos/{id}/shots ─► [FastAPI Server] ──► [metadata.db] (Gộp Shot + Keyframe)
+       ├─► (2) GET /api/videos/{id} ─────► [FastAPI Server] ──► [metadata.db] (Group shots & keyframes)
        │
-       ├─► (3) GET /api/stream/{id} ──────► [FastAPI Server] ──► [data/raw_videos/{id}.mp4] (Stream Range 206)
+       ├─► (3) GET /api/stream/{id} ─────► [FastAPI Server] ──► [data/raw_videos/{id}.mp4] (Stream Range 206)
        │
-       └─► (4) GET /api/keyframes/... ────► [FastAPI Server] ──► [data/keyframes/{id}/*.jpg]
+       └─► (4) GET /api/keyframes/... ───► [FastAPI Server] ──► [data/keyframes/{id}/*.jpg]
 ```
 
 ---
 
-## 4. Kế hoạch Kiểm thử & Tiêu chí Nghiệm thu (Acceptance Criteria)
-
-* [ ] Khởi chạy máy chủ nhanh chóng qua lệnh: `uv run python -m src.ui.debug_server` (hoặc script CLI).
-* [ ] Tự động nhận diện video `L13_V001` (đã hoàn thành trong Task 01 với 292 shot và 344 keyframe).
-* [ ] Video chạy trơn tru, tua mượt mà không bị nghẽn mạng hay tràn RAM.
-* [ ] Nhấp vào shot bất kỳ trên thanh timeline hoặc danh sách -> Video nhảy chính xác đến giây bắt đầu của shot.
-* [ ] Nhấp vào keyframe bất kỳ -> Video nhảy chính xác đến giây của keyframe và hình ảnh trên video khớp với ảnh thumbnail keyframe.
-* [ ] Mức chiếm dụng GPU VRAM là 0MB; CPU tải dưới 10% khi stream.
+## 4. Acceptance Criteria & Test Results
+* [x] Server launches via `uv run python -m src.ui.debug_server` at `http://127.0.0.1:8000`.
+* [x] Successfully queries `L13_V001` (292 shots, 344 keyframes).
+* [x] Video streams smoothly with HTTP 206 Partial Content Range requests.
+* [x] Clicking timeline segments or keyframe thumbnails seeks video to exact timestamps.
+* [x] Scrolling is isolated to `.shot-list`; page layout remains fixed at 100vh viewport height.
+* [x] GPU VRAM consumption is 0MB.
 
 ---
 
-## 5. Sản phẩm Đầu ra (Deliverables)
-1. Mã nguồn Backend: `src/ui/debug_server.py`.
-2. Mã nguồn Frontend: `src/ui/static/debug.html`, `src/ui/static/debug.css`, `src/ui/static/debug.js` (hoặc gói gọn trong single template tối ưu).
-3. Hướng dẫn chạy và gỡ lỗi trong tài liệu.
+## 5. Deliverables
+1. Backend Server: [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py).
+2. Frontend Assets: [src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [src/ui/static/style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css), [src/ui/static/app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js).
+3. Usage Guide: [docs/guides/shot-keyframe-inspector.md](file:///d:/UIT/TX/doan/docs/guides/shot-keyframe-inspector.md).

@@ -1,59 +1,54 @@
-# Task 02: Trích xuất Vector Hình ảnh SigLIP2 và Lập Chỉ mục FAISS
+# Task 02: Visual SigLIP2 Feature Extraction & FAISS Indexing
 
-## 1. Mục tiêu (What)
-* Chuyển đổi toàn bộ ảnh keyframe thành các vector ngữ nghĩa (visual embeddings) bằng mô hình **SigLIP2** (thử nghiệm bản `so400m/384` với fallback sang `base-patch16-256` nếu quá tải VRAM).
-* Tính toán thêm **Vector trung bình theo cảnh (Shot-level Average Embedding)** để đại diện cho toàn bộ ngữ cảnh của một cảnh quay.
-* Lập chỉ mục tìm kiếm siêu nhanh bằng thư viện **FAISS** (`IndexFlatIP` - Inner Product với vector chuẩn hóa L2 tương đương Cosine Similarity).
-* Xây dựng pipeline tra cứu văn bản sang hình ảnh (Text-to-Visual Search) hỗ trợ truy vấn tiếng Anh và tiếng Việt (qua module dịch).
+## 1. Objectives (What)
+* Convert extracted keyframe images into dense visual semantic embeddings using **SigLIP2** (`google/siglip2-so400m-patch14-384`, with fallback to `google/siglip2-base-patch16-256` if VRAM exceeds 3.2 GB).
+* Compute **Shot-Level Average Embeddings (Mean Pooling)** to encapsulate the overall temporal and visual context of each camera take.
+* Build high-speed nearest neighbor search indices using **FAISS** (`IndexFlatIP` - Inner Product over L2-normalized embeddings, mathematically identical to Cosine Similarity).
+* Implement text-to-visual search capability supporting English and Vietnamese queries.
 
 ---
 
-## 2. Các bước thực hiện (How)
+## 2. Implementation Steps (How)
 
-### Bước 2.1: Quản lý VRAM và Batch Inference
-1. **Khởi tạo Mô hình:**
-   * Sử dụng thư viện `transformers` với `torch.float16`:
+### Step 2.1: VRAM Safety & Batch Inference Protocol
+1. **Model Initialization (activate `vram-safe-embedding` skill):**
+   * Load in `torch.float16` to minimize memory footprint:
      ```python
      from transformers import AutoModel, AutoProcessor
      model_name = "google/siglip2-so400m-patch14-384"  # Fallback: "google/siglip2-base-patch16-256"
      model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float16).to("cuda")
      processor = AutoProcessor.from_pretrained(model_name)
      ```
-2. **Cơ chế Batching an toàn:**
-   * Đối với bản 400m: Cấu hình `batch_size = 4` hoặc `batch_size = 8`.
-   * Đối với bản base: Cấu hình `batch_size = 16` hoặc `batch_size = 32`.
-   * Luôn gọi `torch.cuda.empty_cache()` sau mỗi video để tránh tích tụ bộ nhớ rác.
-3. **Chuẩn hóa Vector (L2 Normalization):**
-   * Mọi vector trích xuất ra từ ảnh đều phải được chia cho độ dài L2: `vec = vec / np.linalg.norm(vec, axis=-1, keepdims=True)`.
+2. **Safe Batching Rules:**
+   * For SO400M: Configure `batch_size = 4` (or `8` if VRAM permits).
+   * For Base: Configure `batch_size = 16` (or `32`).
+   * Explicitly execute `gc.collect()` and `torch.cuda.empty_cache()` between video batches.
+3. **L2 Normalization:**
+   * Normalize every extracted vector: `vec = vec / np.linalg.norm(vec, axis=-1, keepdims=True)`.
 
-### Bước 2.2: Tính Vector Trung bình Shot (Shot-level Pooling)
-* Trong một shot có từ 2 đến 6 keyframe:
-  * Lấy trung bình cộng của các vector keyframe trong shot.
-  * Tiếp tục chuẩn hóa L2 cho vector trung bình này.
-  * Lưu trữ cả vector từng keyframe và vector đại diện shot vào chỉ mục để tăng độ bền vững khi người dùng mô tả cả một chuỗi hành động.
+### Step 2.2: Shot-Level Mean Pooling
+* For shots containing multiple keyframes (2 to 6 keyframes):
+  * Compute arithmetic mean of all keyframe vectors in the shot.
+  * Re-apply L2 normalization to the pooled vector.
+  * Index both individual keyframe vectors and shot-level pooled vectors to improve retrieval robustness for temporal action descriptions.
 
-### Bước 2.3: Xây dựng Chỉ mục FAISS
-* Sử dụng cấu trúc `faiss.IndexFlatIP(embedding_dim)` (chỉ số tích vô hướng giữa 2 vector chuẩn hóa L2 chính là độ tương đồng Cosine).
-* Lưu chỉ mục ra đĩa: `data/indices/visual_siglip2.index`.
-* Xây dựng bảng ánh xạ `id_map.json` hoặc bảng SQLite `faiss_visual_map`:
-  `faiss_id -> {video_id, shot_id, keyframe_id, timestamp_sec}`.
+### Step 2.3: FAISS Index Construction
+* Construct `faiss.IndexFlatIP(embedding_dim)`.
+* Save index to disk: `data/indices/visual_siglip2.index`.
+* Persist metadata mapping table (`faiss_visual_map` in SQLite or `id_map.json`):
+  `faiss_id -> {video_id, shot_id, keyframe_id, timestamp_sec, is_shot_pooled}`.
 
 ---
 
-## 3. Quy trình Kiểm thử (How to Test)
-
-1. **Đo đạc Tốc độ & Giám sát VRAM:**
-   * Chạy script trích xuất trên 100 ảnh keyframe đầu tiên.
-   * Quan sát qua lệnh `nvidia-smi` trong terminal:
-     * Mức sử dụng VRAM đỉnh có vượt quá 3.5GB hay không?
-     * Tốc độ xử lý đạt bao nhiêu ảnh/giây?
-   * Tiêu chí đạt: VRAM an toàn dưới 3.2GB và tốc độ đạt tối thiểu từ 4-6 ảnh/giây (với bản 400m) hoặc trên 20 ảnh/giây (với bản base).
-2. **Kiểm thử Truy vấn Ngữ nghĩa Đơn lẻ:**
-   * Đưa vào câu truy vấn tiếng Anh mẫu:
-     * Query: `"a close-up shot of chopping onions"`
-     * Query: `"a red car turning left at crossroad"`
-   * Thực hiện tìm kiếm Top 5 kết quả trong FAISS.
-   * Hiển thị đường dẫn 5 ảnh trả về: Kiểm tra xem nội dung ảnh có đúng với câu mô tả không.
-3. **Đánh giá Baseline Recall:**
-   * Chạy script `evaluate.py` với nguồn truy xuất chỉ lấy từ kênh Visual SigLIP2.
-   * Ghi lại chỉ số `Visual_Only_Recall@10` làm mốc so sánh (Baseline) cho đồ án.
+## 3. Verification & Acceptance Criteria
+1. **VRAM Footprint & Inference Speed Benchmark:**
+   * Benchmark first 100 keyframes:
+     * Peak VRAM must stay strictly below 3.2 GB on the GTX 1650.
+     * Throughput: >= 4 keyframes/sec (SO400M) or >= 20 keyframes/sec (Base).
+2. **Zero-Shot Semantic Search Test:**
+   * Test sample queries:
+     * Query: `"a close-up shot of chopping vegetables"`
+     * Query: `"a vehicle turning at an intersection"`
+   * Verify Top 5 retrieved keyframes match query semantics.
+3. **Baseline Evaluation:**
+   * Run [src/evaluation/evaluate.py](file:///d:/UIT/TX/doan/src/evaluation/evaluate.py) on visual-only retrieval to record baseline `Recall@10` and `MRR`.

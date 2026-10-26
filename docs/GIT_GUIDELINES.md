@@ -1,85 +1,86 @@
-# Hướng dẫn Quản lý Git và Quy trình Làm việc Nhóm (Git & Collaboration Guidelines)
+# Git Workflow & Team Collaboration Guidelines
 
-Tài liệu này quy định chuẩn mực làm việc với Git cho toàn bộ thành viên nhóm thực hiện đồ án tốt nghiệp về **Truy xuất video đa phương thức**.
-
----
-
-## 1. Nguyên tắc Cốt lõi (Core Principles)
-
-1. **Tuyệt đối không commit dữ liệu nặng vào Git:**
-   * Không commit video (`.mp4`, `.mkv`, `.avi`).
-   * Không commit ảnh keyframe (`.jpg`, `.png`).
-   * Không commit cơ sở dữ liệu (`.db`, `.sqlite`) và chỉ mục (`.index`).
-   * Không commit file trọng số mô hình (`.pt`, `.bin`, `.safetensors`, `.onnx`).
-   * Tất cả các định dạng trên đã được cấu hình trong [.gitignore](file:///d:/UIT/TX/doan/.gitignore).
-2. **Kiểm tra trạng thái trước khi commit:**
-   * Luôn gõ lệnh `git status` trước khi thêm file để chắc chắn không vô tình đưa file rác hoặc file dữ liệu vào Git.
-3. **Commit nhỏ và có ý nghĩa (Atomic Commits):**
-   * Mỗi commit chỉ giải quyết một phần việc cụ thể (ví dụ: xong một hàm lọc ảnh mờ, hoặc xong một model dataclass).
-   * Không dồn toàn bộ code của cả tuần vào một commit duy nhất dạng *"update code"* hay *"fix bug"*.
-4. **Không dùng biểu tượng cảm xúc (No Emojis / Icons):**
-   * Không dùng các ký tự icon trong commit message. Sử dụng chữ thuần túy theo chuẩn Conventional Commits.
+This document establishes the standardized Git workflow and collaboration rules for the **Multimodal Video Moment Retrieval** graduation thesis project.
 
 ---
 
-## 2. Chiến lược Phân nhánh (Branching Strategy)
+## 1. Core Principles
 
-Sơ đồ phân nhánh khuyến nghị cho nhóm đồ án:
+1. **Never Commit Heavy Data to Git:**
+   * No raw videos (`.mp4`, `.mkv`, `.avi`).
+   * No keyframe images (`.jpg`, `.png`).
+   * No databases (`.db`, `.sqlite`) or index files (`.index`).
+   * No model weights (`.pt`, `.bin`, `.safetensors`, `.onnx`).
+   * All binary patterns are protected via [.gitignore](file:///d:/UIT/TX/doan/.gitignore).
+2. **Always Inspect Status Before Staging:**
+   * Run `git status` prior to staging to ensure no untracked data or cache artifacts are included.
+3. **Atomic Commits:**
+   * Each commit must address a single logical change (e.g., implement a specific filter function, update a dataclass).
+   * Do not bundle unrelated changes across multiple modules into vague messages like *"update code"* or *"fix bug"*.
+4. **No Emojis / Icons:**
+   * Strictly avoid emojis in commit messages, code, logs, and documentation. Use clean Conventional Commits.
+5. **Language Rule:**
+   * 100% of all commit messages and repository documentation must be written in English.
+
+---
+
+## 2. Branching Strategy
+
+Recommended branching model for the thesis team:
 
 ```
-main (Nhánh chính thức, code ổn định, đã pass qua bộ eval)
+main (Production-ready, stable, passing evaluation harness)
  │
- ├── feat/task-00-eval (Nhánh làm môi trường và bộ benchmark)
- ├── feat/task-01-shots (Nhánh làm tách shot và trích keyframe)
- ├── feat/task-02-visual (Nhánh làm embedding SigLIP2 và FAISS)
- ├── feat/task-03-speech (Nhánh làm ASR Whisper)
- ├── feat/task-04-ocr (Nhánh làm PaddleOCR)
- └── fix/vram-leak-siglip (Nhánh sửa lỗi phát sinh)
+ ├── feat/task-00-eval (Environment & ground truth benchmark)
+ ├── feat/task-01-shots (Shot detection & adaptive keyframes)
+ ├── feat/task-01b-debug-ui (Interactive debug inspector)
+ ├── feat/task-02-visual (SigLIP2 embedding & FAISS indexing)
+ ├── feat/task-03-speech (Whisper ASR transcription)
+ ├── feat/task-04-ocr (PaddleOCR text extraction)
+ ├── feat/task-05-fusion (Temporal fusion & sliding window)
+ └── fix/vram-leak-siglip (Bug fixes & optimizations)
 ```
 
-### Quy tắc đặt tên nhánh:
-* Tính năng mới theo task: `feat/task-XX-<ten-ngan-gon>`
-  * Ví dụ: `feat/task-01-shots`, `feat/task-03-whisper-asr`
-* Sửa lỗi: `fix/<ten-loi>`
-  * Ví dụ: `fix/sqlite-lock`, `fix/empty-audio-crash`
-* Cập nhật tài liệu: `docs/<noi-dung>`
-  * Ví dụ: `docs/project-overview`, `docs/tracking-update`
+### Branch Naming Conventions:
+* Feature branch: `feat/task-XX-<short-name>` (e.g. `feat/task-01-shots`, `feat/task-02-visual`)
+* Bug fix branch: `fix/<issue-name>` (e.g. `fix/sqlite-lock`, `fix/empty-audio-crash`)
+* Documentation: `docs/<topic>` (e.g. `docs/project-overview`, `docs/tracking-update`)
 
 ---
 
-## 3. Quy chuẩn Viết Commit Message (Conventional Commits)
+## 3. Conventional Commits Specification
 
-Toàn bộ commit message bắt buộc **viết 100% bằng tiếng Anh**, theo cấu trúc chuẩn:
+All commit messages must be written in English adhering to the standard format:
 
 ```
-<type>(<scope>): <mô tả ngắn gọn bằng thể mệnh lệnh>
+<type>(<scope>): <concise description in imperative mood>
 
-[Tùy chọn: Thân commit giải thích lý do kỹ thuật nếu thay đổi phức tạp]
+[Optional body: technical rationale, trade-offs, or issue references]
 ```
 
-### A. Các Type thông dụng:
-* `feat`: Bổ sung tính năng mới hoặc module mới.
-* `fix`: Sửa lỗi logic, sửa bug, giải quyết memory leak.
-* `refactor`: Tái cấu trúc mã nguồn (sắp xếp lại code mà không thay đổi tính năng).
-* `perf`: Cải thiện hiệu năng xử lý (tăng tốc độ FPS, giảm VRAM).
-* `test`: Thêm hoặc cập nhật kịch bản kiểm thử, thêm file ground truth.
-* `docs`: Cập nhật tài liệu (markdown, hướng dẫn sử dụng).
-* `chore`: Cấu hình môi trường, cập nhật `pyproject.toml`, `.gitignore`.
+### A. Allowed Types:
+* `feat`: New feature, pipeline stage, or user interface module.
+* `fix`: Bug fix, logic correction, memory leak resolution.
+* `refactor`: Code restructuring without modifying behavior.
+* `perf`: Performance improvements (faster FPS, reduced VRAM).
+* `test`: Adding or modifying test scripts or ground truth benchmarks.
+* `docs`: Documentation updates (markdown, guides, comments).
+* `chore`: Build config, dependencies via `pyproject.toml`, `.gitignore`.
 
-### B. Các Scope phù hợp với dự án:
-* `shots`: Module tách cảnh và ranh giới video.
-* `keyframes`: Module trích xuất và lọc keyframe thích ứng.
-* `visual`: Module SigLIP2 và chỉ mục hình ảnh.
-* `speech`: Module Whisper và phiên âm ASR.
-* `ocr`: Module đọc chữ PaddleOCR và FTS5.
-* `fusion`: Module gộp điểm thời gian và Sliding Window.
-* `ui`: Giao diện người dùng web và video streaming.
-* `eval`: Bộ benchmark, ground truth, script tính chỉ số.
-* `config`: File cấu hình YAML và ConfigManager.
+### B. Standard Scopes:
+* `shots`: Shot boundary detection and video segmentation.
+* `keyframes`: Keyframe extraction, blur filtering, deduplication.
+* `visual`: SigLIP2 embeddings and visual indexing.
+* `speech`: Whisper transcription and ASR processing.
+* `ocr`: PaddleOCR detection and SQLite FTS5 search.
+* `fusion`: Temporal alignment, RRF score fusion, sliding window.
+* `ui`: Web application, streaming server, player timeline.
+* `eval`: Scientific evaluation, Recall@K, MRR, ground truth.
+* `config`: YAML parameters and Configuration Manager.
 
-### C. Ví dụ Commit Chuẩn và Không chuẩn:
+### C. Good vs Bad Examples:
 
-* **Chuẩn (Good):**
+* **Good:**
   * `feat(shots): implement adaptive keyframe selection with laplacian variance`
   * `feat(visual): add siglip2 batch extraction with fp16 vram safety`
   * `fix(speech): remove temporary wav files after whisper transcription`
@@ -87,76 +88,73 @@ Toàn bộ commit message bắt buộc **viết 100% bằng tiếng Anh**, theo 
   * `perf(ocr): add edge density pre-filter to skip non-text frames`
   * `docs(agents): update hardware constraints and git guidelines`
 
-* **Không chuẩn (Bad - Cần tránh):**
-  * `fix bug` *(Quá mơ hồ, không biết sửa bug gì)*
-  * `update code hom nay` *(Dùng tiếng Việt, không theo chuẩn type/scope)*
-  * `add feature and fixed some files` *(Gom nhiều việc không liên quan vào 1 commit)*
-  * `:rocket: deploy app` *(Dùng icon emoji - vi phạm quy định)*
+* **Bad (Avoid):**
+  * `fix bug` *(Vague, uninformative)*
+  * `update code hom nay` *(Contains non-English words, lacks scope)*
+  * `add feature and fixed some files` *(Combines disparate tasks)*
+  * `:rocket: deploy app` *(Contains emoji)*
 
 ---
 
-## 4. Kịch bản Làm việc Chung Hàng ngày (Step-by-Step Workflow)
+## 4. Daily Collaboration Scenarios
 
-### Kịch bản 1: Bắt đầu làm một Task mới
-1. Chuyển về nhánh `main` và lấy code mới nhất về:
+### Scenario 1: Starting a New Task
+1. Switch to `main` and pull latest changes:
    ```powershell
    git checkout main
    git pull origin main
    ```
-2. Tạo nhánh mới dựa trên mã task:
+2. Create and switch to a task feature branch:
    ```powershell
-   git checkout -b feat/task-01-shots
+   git checkout -b feat/task-02-visual
    ```
-3. Tiến hành viết code trong nhánh này.
 
-### Kịch bản 2: Khi hoàn thành một mẩu code hoặc một hàm
-1. Kiểm tra trạng thái các file đã thay đổi:
+### Scenario 2: Committing Completed Work
+1. Check modified files:
    ```powershell
    git status
    ```
-2. Chạy thử nghiệm unit test cục bộ (`python -m src.extractors.shots`) để chắc chắn code chạy không lỗi.
-3. Thêm các file thay đổi vào staging:
+2. Test code locally to ensure zero runtime errors.
+3. Stage relevant files:
    ```powershell
-   git add src/extractors/shots.py configs/default_config.yaml
+   git add src/extractors/visual.py configs/default_config.yaml
    ```
-4. Tạo commit theo quy chuẩn:
+4. Commit following Conventional Commits:
    ```powershell
-   git commit -m "feat(shots): add transnetv2 boundary detection with frame caching"
+   git commit -m "feat(visual): implement siglip2 embedding extractor with fp16 batching"
    ```
 
-### Kịch bản 3: Đẩy nhánh lên Remote và Gộp vào `main`
-1. Đẩy nhánh của bạn lên GitHub/GitLab:
+### Scenario 3: Pushing Branch & Creating a Pull Request
+1. Push branch to remote:
    ```powershell
-   git push origin feat/task-01-shots
+   git push origin feat/task-02-visual
    ```
-2. Tạo **Pull Request (PR)** trên giao diện web (GitHub/GitLab) để người còn lại trong nhóm xem lại (Review code):
-   * Tên PR: `[Task 01] Implement Shot Detection and Adaptive Keyframes`
-   * Mô tả ngắn gọn: Đã test trên video mẫu, tốc độ đạt 80 FPS, VRAM an toàn.
-3. Sau khi đồng nghiệp duyệt và xác nhận không có xung đột (conflict), nhấn **Merge** vào `main`.
-4. Người ở máy khác chỉ cần `git checkout main` và `git pull origin main` là có đầy đủ code mới nhất.
+2. Open a Pull Request on GitHub for peer review:
+   * Title: `[Task 02] Implement SigLIP2 Visual Extraction & FAISS Index`
+   * Description: Tested on 344 keyframes, verified VRAM under 3.2 GB.
+3. Merge into `main` after review and verification.
 
-### Kịch bản 4: Xử lý Xung đột Code (Merge Conflict)
-Nếu bạn và bạn cùng nhóm lỡ sửa cùng một dòng trong file:
-1. Khi `git merge` hoặc `git pull`, Git sẽ báo dòng bị conflict.
-2. Mở file có conflict trong trình soạn thảo, Git sẽ đánh dấu đoạn `<<<<<<< HEAD` và `>>>>>>>`.
-3. Bàn bạc với đồng đội để giữ lại đoạn code đúng nhất, xóa các dấu đánh dấu của Git.
-4. Lưu file và commit lại:
+### Scenario 4: Resolving Merge Conflicts
+If concurrent edits produce conflicts:
+1. Git highlights conflicting lines with `<<<<<<< HEAD` and `>>>>>>>`.
+2. Inspect and resolve conflicts cooperatively.
+3. Stage resolved files and commit:
    ```powershell
-   git add <file_da_sua>
+   git add <resolved_file>
    git commit -m "fix(merge): resolve conflict in score_fusion.py"
    ```
 
 ---
 
-## 5. Bảng Tra cứu Lệnh Git Thông dụng
+## 5. Git Command Cheat Sheet
 
-| Lệnh | Ý nghĩa |
+| Command | Description |
 |---|---|
-| `git status` | Xem trạng thái các file đang sửa đổi (luôn dùng trước khi add) |
-| `git diff` | Xem chi tiết từng dòng code đã sửa đổi |
-| `git branch -a` | Xem danh sách tất cả các nhánh cục bộ và trên remote |
-| `git checkout -b <ten_nhanh>` | Tạo nhánh mới và chuyển sang nhánh đó ngay lập tức |
-| `git checkout <ten_nhanh>` | Chuyển qua lại giữa các nhánh |
-| `git pull origin main` | Kéo code mới nhất từ nhánh main trên server về máy |
-| `git push origin <ten_nhanh>` | Đẩy nhánh hiện tại lên server |
-| `git log -n 5 --oneline` | Xem lịch sử 5 commit gần nhất ngắn gọn trên 1 dòng |
+| `git status` | Check working tree status (always run before staging) |
+| `git diff` | Inspect line-by-line code modifications |
+| `git branch -a` | List all local and remote branches |
+| `git checkout -b <branch>` | Create and switch to a new branch |
+| `git checkout <branch>` | Switch to an existing branch |
+| `git pull origin main` | Fetch and merge upstream changes from main |
+| `git push origin <branch>` | Push local branch commits to remote |
+| `git log -n 5 --oneline` | View compact summary of recent 5 commits |

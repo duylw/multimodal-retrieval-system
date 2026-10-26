@@ -1,78 +1,80 @@
-# TRACKING.md - Bảng Theo dõi Tiến độ Đồ án
+# TRACKING.md - Project Execution & Milestone Tracking
 
-> **Dự án:** Hệ thống Truy xuất Video Đa phương thức bằng Ngôn ngữ Tự nhiên (Multimodal Video Moment Retrieval)  
-> **Sinh viên:** Nhóm đồ án UIT  
-> **Cập nhật lần cuối:** 15/10/2026  
-> **Môi trường thực thi:** GTX 1650 (4GB VRAM), RAM 16GB, Trống ~150GB Ổ D.
-
----
-
-## 1. Trạng thái Tổng quan (Overall Status)
-
-* **Giai đoạn hiện tại:** **Khởi tạo và Định hình Kiến trúc (Project Initialization & Planning)**
-* **Tiến độ tổng thể:** `10%`
-* **Công việc đang làm ngay lúc này:** Hoàn thành khung tài liệu kiến trúc, quy chuẩn hoạt động, phân rã task chi tiết và chuẩn bị môi trường chạy code.
+> **Project:** Natural Language Multimodal Video Moment Retrieval System  
+> **Institution:** University of Information Technology (UIT)  
+> **Target Environment:** NVIDIA GeForce GTX 1650 (4GB VRAM), 16GB RAM, ~150GB Free Disk (D:).  
+> **Last Updated:** October 26, 2026
 
 ---
 
-## 2. Bảng Theo dõi Nhiệm vụ Chi tiết (Task Board)
+## 1. Overall Status
 
-| Mã Task | Tên Nhiệm vụ | Trọng tâm | Trạng thái | Tài liệu Chi tiết | Sản phẩm Đầu ra (Deliverables) |
+* **Current Stage:** **Milestone 1: Baseline Minimum (Visual Pipeline & Core Indexing)**
+* **Overall Progress:** `15%`
+* **Current Focus:** Completed Shot Detection, Adaptive Keyframe Extraction, SQLite Cataloging, and Debug Web Inspector. Ready for SigLIP2 feature extraction and FAISS indexing (Task 02).
+
+---
+
+## 2. Task Board
+
+| Task ID | Task Title | Primary Focus | Status | Documentation | Deliverables |
 |---|---|---|---|---|---|
-| **Task 00** | Thiết lập Môi trường & Bộ Eval | Cài đặt venv với uv, CUDA, `ground_truth.json`, script tính Recall@K, MRR | **Hoàn thành (Completed)** | [task-00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md) | `pyproject.toml`, `evaluate.py`, `ground_truth.json` |
-| **Task 01** | Tách Cảnh & Chọn Keyframe | TransNetV2/SceneDetect, lọc ảnh mờ Laplacian, loại ảnh tối/trùng | **Hoàn thành (Completed)** | [task-01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md) | `shots.py`, `keyframes.py`, bảng SQLite `shots` |
-| **Task 01B** | Giao diện Debug Cảnh & Keyframe | FastAPI + Range 206, đồng bộ video timeline, hiển thị shot & keyframe | **Hoàn thành (Completed)** | [task-01b](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md) | `debug_server.py`, giao diện SPA debug video |
-| **Task 02** | Visual SigLIP2 & FAISS | Trích vector SigLIP2, pooling theo shot, lập chỉ mục FAISS | **Sẵn sàng thực hiện (Ready)** | [task-02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md) | `visual.py`, `visual_siglip2.index` |
-| **Task 03** | Lời thoại Whisper & Hybrid Index | Silero VAD + faster-whisper int8, BM25 + bge-m3 dense | **Chờ thực hiện (Pending)** | [task-03](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md) | `speech.py`, bảng SQLite `transcripts`, `asr.index` |
-| **Task 04** | Chữ Màn hình PaddleOCR | Bộ lọc frame có chữ, PaddleOCR tiếng Việt trên CPU, SQLite FTS5 | **Chờ thực hiện (Pending)** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, bảng ảo SQLite `ocr_fts` |
-| **Task 05** | Hợp nhất Đa phương thức | Query parser, chuẩn hóa điểm RRF, Sliding Window 5s | **Chờ thực hiện (Pending)** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
-| **Task 06** | Giao diện Web & Feedback | FastAPI, video stream Range 206, Rocchio relevance feedback | **Chờ thực hiện (Pending)** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, thư mục `static/` (HTML/CSS/JS) |
-| **Task 07** | Âm thanh CLAP (Giai đoạn 2) | Cắt audio 10s, vector CLAP audio events, FAISS audio | **Dự phòng Giai đoạn 2** | [task-07](file:///d:/UIT/TX/doan/tasks/task-07-audio-clap.md) | `audio_events.py`, `audio_clap.index` |
+| **Task 00** | Environment Setup & Eval Harness | uv virtualenv, CUDA 12.1, `ground_truth.json`, Recall@K/MRR script | **Completed** | [task-00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md) | `pyproject.toml`, `evaluate.py`, `ground_truth.json` |
+| **Task 01** | Shot Detection & Keyframe Extraction | SceneDetect / TransNetV2, Laplacian blur filter, color deduplication | **Completed** | [task-01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md) | `shots.py`, `keyframes.py`, SQLite `shots` table |
+| **Task 01B** | Shot & Keyframe Debug Inspector | FastAPI + Range 206, video timeline sync, two-way shot & keyframe inspection | **Completed** | [task-01b](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md) | `debug_server.py`, SPA debug interface |
+| **Task 02** | Visual SigLIP2 & FAISS | SigLIP2 embeddings, shot-level mean pooling, FAISS indexing | **Ready** | [task-02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md) | `visual.py`, `visual_siglip2.index` |
+| **Task 03** | Whisper Speech & Hybrid Index | Silero VAD + faster-whisper int8, BM25 + bge-m3 dense | **Pending** | [task-03](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md) | `speech.py`, SQLite `transcripts`, `asr.index` |
+| **Task 04** | On-screen Text PaddleOCR | Text keyframe detector, PaddleOCR on CPU, SQLite FTS5 | **Pending** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, SQLite `ocr_fts` virtual table |
+| **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Pending** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
+| **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
+| **Task 07** | CLAP Audio Events (Phase 2) | 10s audio chunks, CLAP event embeddings, FAISS audio index | **Phase 2 Reserve** | [task-07](file:///d:/UIT/TX/doan/tasks/task-07-audio-clap.md) | `audio_events.py`, `audio_clap.index` |
 
 ---
 
-## 3. Các Cột mốc Lớn (Milestones)
+## 3. Major Milestones
 
-* [x] **Cột mốc 0: Định hình Kiến trúc & Tài liệu Dự án** (Hoàn thành 15/10/2026)
-  * Thiết lập nguyên tắc làm việc và ràng buộc phần cứng: [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md).
-  * Định nghĩa bài toán và luồng xử lý tổng thể: [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md).
-  * Phân rã công việc thành các task rõ ràng kèm cách làm và kiểm thử: [tasks/](file:///d:/UIT/TX/doan/tasks).
-* [ ] **Cột mốc 1: Baseline Tối thiểu (End-to-End Visual Only)**
-  * Cài đặt môi trường, benchmark được tốc độ tách shot và SigLIP2 trên GTX 1650.
-  * [x] Hoàn thiện công cụ kiểm tra gỡ lỗi phân đoạn shot và trích xuất keyframe ([Task 01B](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md)).
-  * Tìm kiếm được khoảnh khắc bằng hình ảnh đơn thuần và đo `Recall@10` đầu tiên.
-* [ ] **Cột mốc 2: Tích hợp Đa kênh Văn bản (ASR + OCR)**
-  * Hoàn thành phiên âm Whisper tiếng Việt và đọc chữ PaddleOCR trên CPU.
-  * Tạo chỉ mục kép và SQLite FTS5.
-* [ ] **Cột mốc 3: Hợp nhất Thời gian & Đo lường Ablation Study**
-  * Hoàn thành thuật toán Sliding Window và chuẩn hóa điểm RRF.
-  * Xuất bảng báo cáo so sánh độ chính xác tăng thêm của từng kênh.
-* [ ] **Cột mốc 4: Hoàn thiện Web UI & Bảo vệ Đồ án**
-  * Hoàn thành giao diện tra cứu, phát video đúng giây và phản hồi tương tác.
-  * Đóng gói mã nguồn và hoàn thiện báo cáo luận văn.
-
----
-
-## 4. Nhật ký Hoạt động (Activity Log)
-
-* **15/10/2026:**
-  * Rà soát và đánh giá ý tưởng ban đầu trong [first_ideas.md](file:///d:/UIT/TX/doan/first_ideas.md).
-  * Nhận diện các điểm nghẽn kỹ thuật: VRAM 4GB của GTX 1650, lệch thang đo điểm số giữa Cosine và BM25, hiện tượng xẻ đôi sự kiện trên trục thời gian.
-  * Khởi tạo bộ tài liệu quy chuẩn: [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md), [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md), bảng theo dõi [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md).
-  * Viết chi tiết 8 tài liệu task từ [task-00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md) đến [task-07](file:///d:/UIT/TX/doan/tasks/task-07-audio-clap.md).
-  * Bổ sung tài liệu từ điển thuật ngữ [docs/GLOSSARY.md](file:///d:/UIT/TX/doan/docs/GLOSSARY.md) và hướng dẫn Git [docs/GIT_GUIDELINES.md](file:///d:/UIT/TX/doan/docs/GIT_GUIDELINES.md).
-  * Khởi tạo 3 workspace skills (`video-benchmark-eval`, `vram-safe-embedding`, `temporal-multimodal-fusion`) và tinh gọn [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md) xuống còn 42 dòng.
-  * Hoàn thành [Task 00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md): Cài đặt môi trường `uv`, PyTorch 2.5.1 CUDA 12.1 (GTX 1650 4GB), tập 20 truy vấn [ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json), và công cụ đo lường [evaluate.py](file:///d:/UIT/TX/doan/src/evaluation/evaluate.py).
-  * Hoàn thành [Task 01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md): Viết [metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py), [shots.py](file:///d:/UIT/TX/doan/src/extractors/shots.py) (292 shots trong 60s), và [keyframes.py](file:///d:/UIT/TX/doan/src/extractors/keyframes.py) (344 keyframes trong 25s, dung lượng ~18.8MB).
-* **26/10/2026:**
-  * Bổ sung và hoàn thành [Task 01B](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md): Xây dựng server FastAPI [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) với HTTP 206 Range Streaming và giao diện Single-Page Application tại [src/ui/static/](file:///d:/UIT/TX/doan/src/ui/static/) hỗ trợ timeline tương tác, đồng bộ hai chiều video - shot - keyframes.
+* [x] **Milestone 0: Architecture Formulation & Project Governance** (Completed Oct 15, 2026)
+  * Operating rules and hardware constraints defined in [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md).
+  * System architecture and multimodal blueprint documented in [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md).
+  * Detailed task breakdowns and test criteria created in [tasks/](file:///d:/UIT/TX/doan/tasks).
+* [ ] **Milestone 1: Baseline Minimum (End-to-End Visual Retrieval)**
+  * Environment setup and evaluation benchmark ready on GTX 1650.
+  * [x] Shot boundary detection, adaptive keyframe extraction, and SQLite cataloging ([Task 01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md)).
+  * [x] Interactive debug inspector with HTTP 206 Range streaming and shot timeline synchronization ([Task 01B](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md)).
+  * Visual embeddings with SigLIP2 and initial `Recall@10` measurement on ground truth benchmark ([Task 02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md)).
+* [ ] **Milestone 2: Text Channel Integration (ASR + OCR)**
+  * Vietnamese speech transcription using faster-whisper and on-screen text extraction with PaddleOCR on CPU.
+  * Hybrid indices (BM25 + bge-m3) and SQLite FTS5 search index.
+* [ ] **Milestone 3: Temporal Multimodal Fusion & Scientific Ablation Study**
+  * Sliding window score aggregation (5s) and Reciprocal Rank Fusion (RRF).
+  * Ablation study tables measuring incremental contributions across Visual, Speech, and OCR channels.
+* [ ] **Milestone 4: Web Application Delivery & Thesis Defense**
+  * Search UI with timestamp-accurate video playback and relevance feedback.
+  * Clean packaged codebase and thesis demonstration materials.
 
 ---
 
-## 5. Hành động Kế tiếp (Next Action)
-* **Bắt tay vào thực hiện [Task 02: Trích xuất Vector Hình ảnh SigLIP2 và Lập Chỉ mục FAISS](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md):**
-  1. Kích hoạt skill chuyên biệt `vram-safe-embedding` ([.agents/skills/vram-safe-embedding/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/vram-safe-embedding/SKILL.md)).
-  2. Cài đặt các thư viện `transformers`, `accelerate`, `faiss-cpu`.
-  3. Viết module [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py) trích xuất vector đặc trưng SigLIP2 (FP16, batching 4-8 an toàn cho 4GB VRAM).
-  4. Viết module [src/indexers/vector_index.py](file:///d:/UIT/TX/doan/src/indexers/vector_index.py) xây dựng chỉ mục FAISS `IndexFlatIP`.
-  5. Đánh giá Recall@K sơ khởi trên tập `ground_truth.json`.
+## 4. Activity Log
+
+* **Oct 15, 2026:**
+  * Initial architectural review and technical bottleneck identification (GTX 1650 4GB VRAM limit, scale disparity between Cosine and BM25 scores, temporal fragmentation).
+  * Standardized governance setup: [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md), [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md), [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md).
+  * Authored technical task specifications from [task-00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md) through [task-07](file:///d:/UIT/TX/doan/tasks/task-07-audio-clap.md).
+  * Added [docs/GLOSSARY.md](file:///d:/UIT/TX/doan/docs/GLOSSARY.md) and [docs/GIT_GUIDELINES.md](file:///d:/UIT/TX/doan/docs/GIT_GUIDELINES.md).
+  * Initialized 3 workspace skills (`video-benchmark-eval`, `vram-safe-embedding`, `temporal-multimodal-fusion`).
+  * Completed [Task 00](file:///d:/UIT/TX/doan/tasks/task-00-environment-and-eval.md): Virtualenv via `uv`, PyTorch 2.5.1 CUDA 12.1, 20-query [ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json), and benchmark harness [evaluate.py](file:///d:/UIT/TX/doan/src/evaluation/evaluate.py).
+  * Completed [Task 01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md): Implemented [metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py), [shots.py](file:///d:/UIT/TX/doan/src/extractors/shots.py) (292 shots in 60s), and [keyframes.py](file:///d:/UIT/TX/doan/src/extractors/keyframes.py) (344 sharp keyframes in 25s, ~18.8MB).
+* **Oct 26, 2026:**
+  * Implemented and completed [Task 01B](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md): FastAPI backend in [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) with HTTP 206 Range video streaming and Single-Page Application in [src/ui/static/](file:///d:/UIT/TX/doan/src/ui/static/) featuring two-way timeline synchronization, auto-scroll isolation, and responsive keyframe inspection cards.
+  * Added feature documentation runbook [.agents/skills/feature-documentation-guide/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/feature-documentation-guide/SKILL.md) and initial guides in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides/).
+  * Unified project language policy: User communicates in Vietnamese in chat, all generated documentation and codebase files are 100% English.
+
+---
+
+## 5. Next Action
+* **Execute [Task 02: Visual Embedding Extraction with SigLIP2 and FAISS Indexing](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md):**
+  1. Activate specialized skill `vram-safe-embedding` ([.agents/skills/vram-safe-embedding/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/vram-safe-embedding/SKILL.md)).
+  2. Install dependencies: `transformers`, `accelerate`, `faiss-cpu`.
+  3. Implement [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py) for SigLIP2 feature extraction (FP16, safe batching for 4GB VRAM).
+  4. Implement [src/indexers/vector_index.py](file:///d:/UIT/TX/doan/src/indexers/vector_index.py) for FAISS `IndexFlatIP`.
+  5. Measure initial Recall@K and MRR on the benchmark query set.
