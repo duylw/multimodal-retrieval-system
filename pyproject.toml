@@ -11,5 +11,6 @@ dependencies = [
     "opencv-python>=5.0.0.93",
     "pydantic>=2.14.1",
     "pyyaml>=6.0.3",
+    "scenedetect>=0.7.2",
     "tqdm>=4.70.1",
 ]
