@@ -41,3 +41,10 @@ Before writing code or performing tasks, the AI assistant **must check in order 
 ## 5. Feature Documentation Standard
 * **Mandatory Documentation for Every Feature:** After completing any feature or executable module (completed Task), the assistant must create a concise, practical usage guide in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides/) (`<feature-name>.md`) adhering to the **`feature-documentation-guide`** skill.
 * **Core Structure:** (1) Feature Overview; (2) Quick Start CLI (`uv run python -m ...`); (3) CLI Arguments Table; (4) Inputs & Outputs; (5) Hardware Constraints & Troubleshooting.
+
+---
+
+## 6. UI Testing Protocol (No Automated Browser Subagents)
+* **No Automated Browser Subagents Rule:** Never spawn or invoke automated browser subagents (`browser_subagent`) to test web UIs in Chrome. Automated browser subagents consume excessive time, memory, and token budget.
+* **User-Driven Manual UI Testing:** When UI verification is required, the assistant must provide concise manual test steps, expected behaviors, and direct URLs (e.g. `http://127.0.0.1:8000`) in chat. The user will test the interface directly in their browser and report back observations, console logs, or visual errors for the assistant to resolve.
+
