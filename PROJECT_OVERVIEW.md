@@ -108,6 +108,7 @@ d:/UIT/TX/doan/
 ├── tasks/                     # Chi tiết từng gói công việc kỹ thuật
 │   ├── task-00-environment-and-eval.md
 │   ├── task-01-shot-detection-keyframes.md
+│   ├── task-01b-debug-ui-shots-keyframes.md
 │   ├── task-02-visual-siglip-faiss.md
 │   ├── task-03-asr-whisper.md
 │   ├── task-04-ocr-paddle.md
@@ -148,8 +149,9 @@ d:/UIT/TX/doan/
 │   │   ├── ground_truth.json  # 30-50 câu truy vấn kèm mốc thời gian chuẩn
 │   │   └── evaluate.py        # Tính toán Recall@K, MRR, vẽ bảng ablation
 │   │
-│   └── ui/                    # Giao diện tìm kiếm trực quan
-│       ├── app.py             # FastAPI / Web Server
+│   └── ui/                    # Giao diện tìm kiếm trực quan & công cụ debug
+│       ├── debug_server.py    # FastAPI server phục vụ debug shot & keyframe timeline
+│       ├── app.py             # FastAPI / Web Server chính cho tìm kiếm
 │       └── static/            # Giao diện HTML/CSS/JS (Video player + Seekbar)
 │
 ├── data/                      # Lưu trữ dữ liệu (được loại trừ trong .gitignore)
