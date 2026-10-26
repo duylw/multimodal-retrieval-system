@@ -34,6 +34,10 @@ class ConfigManager:
         """Returns the raw dictionary of configuration parameters."""
         return self._config
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Returns configuration parameters as a dictionary."""
+        return dict(self._config)
+
     def get(self, section: str, key: str = None, default: Any = None) -> Any:
         """
         Safely retrieves a configuration value.
