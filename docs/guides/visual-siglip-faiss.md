@@ -64,7 +64,7 @@ extractor.safe_unload()
 * **Inputs:**
   * Keyframe images: `data/keyframes/{video_id}/*.jpg` (from Task 01).
   * SQLite metadata: [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db) (`shots` and `keyframes` records).
-  * Ground truth benchmark (optional): [data/ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json).
+  * Ground truth benchmark (optional): [data/ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json) *(Note: Currently a synthetic schema template for pipeline integration; metrics against this file serve as baseline test runs only)*.
 * **Outputs:**
   * FAISS Binary Index: [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index) (IndexFlatIP containing 636 L2-normalized 1152D vectors).
   * Metadata Mapping JSON: [data/indices/visual_siglip2.json](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.json) (maps FAISS IDs to timestamps, shot boundaries, and pooled flags).

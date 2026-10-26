@@ -110,7 +110,8 @@ def run_visual_pipeline(
                 video_file_name = f"{video_id}.mp4"
                 video_gt = [
                     g for g in all_gt
-                    if g.get("video_file") == video_file_name or g.get("video_id") == video_id
+                    if isinstance(g, dict) and not g.get("is_template_notice") and "query_id" in g
+                    and (g.get("video_file") == video_file_name or g.get("video_id") == video_id)
                 ]
 
                 if video_gt:

@@ -105,7 +105,11 @@ def evaluate_retrieval(
     Returns:
         Dictionary containing overall metrics and modality breakdowns.
     """
-    total_queries = len(ground_truth)
+    valid_gt = [
+        g for g in ground_truth
+        if isinstance(g, dict) and "query_id" in g and not g.get("is_template_notice")
+    ]
+    total_queries = len(valid_gt)
     if total_queries == 0:
         return {"error": "Ground truth list is empty"}
 
@@ -115,7 +119,7 @@ def evaluate_retrieval(
     # Track metrics broken down by modality
     modality_stats: Dict[str, Dict[str, Any]] = {}
 
-    for gt in ground_truth:
+    for gt in valid_gt:
         qid = gt["query_id"]
         preds_for_q = predictions.get(qid, [])
         modalities = gt.get("modality_expected", ["unknown"])

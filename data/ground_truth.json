@@ -1,5 +1,9 @@
 [
   {
+    "is_template_notice": true,
+    "warning": "DISCLAIMER: This ground truth dataset is currently a synthetic template for testing pipeline execution and data schemas. It does not represent real ground truth annotations yet. Evaluation metrics computed against this file will not reflect actual retrieval quality until annotated data is imported."
+  },
+  {
     "query_id": "q01",
     "query": "cận cảnh đĩa thức ăn được bày biện trên bàn",
     "video_file": "L13_V001.mp4",
