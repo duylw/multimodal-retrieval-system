@@ -236,7 +236,7 @@ def search_visual(
     # Lazy-load vector index
     if _vector_index is None:
         from src.indexers.vector_index import VectorIndex
-        _vector_index = VectorIndex({}, embedding_dim=1152)
+        _vector_index = VectorIndex({}, embedding_dim=768)
         _vector_index.load(str(index_path), str(metadata_path))
 
     # Lazy-load visual extractor for text embedding
