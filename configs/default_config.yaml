@@ -19,8 +19,8 @@ shot_detection:
   method: "transnetv2" # options: "transnetv2", "pyscenedetect"
   threshold: 0.5
   min_shot_duration_sec: 1.0
-  target_fps: 25 # downsample high-fps videos (e.g. 50/60fps) to 25fps for fast boundary detection
-  high_fps_threshold: 30 # trigger frame-skipping when input fps exceeds this value
+  target_fps: 12.5 # downsample detection fps to 12.5fps for fast boundary detection
+  high_fps_threshold: 15.0 # trigger frame-skipping when input fps exceeds this value
 
 keyframe_selection:
   max_keyframes_per_shot: 3

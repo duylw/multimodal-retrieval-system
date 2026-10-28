@@ -110,14 +110,14 @@ class ShotDetector(BaseExtractor):
             total_frames=total_frames
         )
 
-        # 3. Configure frame-skipping if input video has high framerate (> 30 FPS)
+        # 3. Configure frame-skipping if input video framerate exceeds threshold
         frame_skip = 0
         if fps > self.high_fps_threshold:
             frame_skip = max(1, round(fps / self.target_fps) - 1)
             effective_fps = fps / (frame_skip + 1)
             logger.info(
-                f"[INFO] High FPS detected ({fps:.1f} FPS). Applying frame_skip={frame_skip} "
-                f"to normalize effective detection to {effective_fps:.1f} FPS."
+                f"[INFO] Normalizing detection framerate from {fps:.1f} FPS to {effective_fps:.1f} FPS "
+                f"(frame_skip={frame_skip})."
             )
 
         # 4. Run scene detection with SceneManager
