@@ -4,10 +4,16 @@ Supports single video and batch directory processing with pre-flight guards and 
 """
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# Suppress low-level FFmpeg/H.264 non-fatal decoder warnings
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
+os.environ["OPENCV_LOG_LEVEL"] = "OFF"
+
 from loguru import logger
 
 from src.common.config import ConfigManager

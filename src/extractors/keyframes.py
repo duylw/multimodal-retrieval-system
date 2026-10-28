@@ -3,11 +3,20 @@ Adaptive keyframe selection extractor with time-interval sampling,
 Laplacian blur filtering, black/blank rejection, and intra-shot deduplication.
 """
 
+import os
+
+# Suppress low-level FFmpeg/H.264 non-fatal decoder warnings (e.g. mmco unref short)
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
+os.environ["OPENCV_LOG_LEVEL"] = "OFF"
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 from loguru import logger
+
+if hasattr(cv2, "setLogLevel"):
+    cv2.setLogLevel(0)
 
 from src.common.base import BaseExtractor
 from src.common.config import ConfigManager
