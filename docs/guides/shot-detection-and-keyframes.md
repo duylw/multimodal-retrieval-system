@@ -12,25 +12,28 @@
 
 ## 2. Quick Start CLI
 
-### Execute shot segmentation and keyframe extraction for a video:
+### Execute shot boundary detection (Stage 1):
 ```powershell
-uv run python -c "
-from src.extractors.shots import ShotExtractor
-from src.extractors.keyframes import KeyframeExtractor
+# Single video execution
+uv run python -m src.extractors.run_shots --video-id L13_V001
 
-video_id = 'L13_V001'
-video_path = f'data/raw_videos/{video_id}.mp4'
+# Batch directory execution
+uv run python -m src.extractors.run_shots --video-dir data/raw_videos/
 
-# 1. Extract shots
-shot_ext = ShotExtractor()
-shots = shot_ext.extract_and_save(video_path, video_id)
-print(f'[OK] Extracted {len(shots)} shots for {video_id}')
+# Force re-execution (overwrites previous stage artifacts)
+uv run python -m src.extractors.run_shots --video-id L13_V001 --force
+```
 
-# 2. Extract keyframes
-kf_ext = KeyframeExtractor()
-keyframes = kf_ext.extract_and_save(video_path, video_id, shots)
-print(f'[OK] Extracted {len(keyframes)} keyframes for {video_id}')
-"
+### Execute adaptive keyframe extraction (Stage 2):
+```powershell
+# Single video execution (requires Stage 1 shots completed)
+uv run python -m src.extractors.run_keyframes --video-id L13_V001
+
+# Batch directory execution
+uv run python -m src.extractors.run_keyframes --video-dir data/raw_videos/
+
+# Force re-extraction
+uv run python -m src.extractors.run_keyframes --video-id L13_V001 --force
 ```
 
 ---

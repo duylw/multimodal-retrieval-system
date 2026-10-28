@@ -111,6 +111,7 @@
             <div class="pane-mode-tabs">
                 <button type="button" class="tab-btn active" id="tabShots">Shots &amp; Keyframes (<span id="tabShotCount">--</span>)</button>
                 <button type="button" class="tab-btn" id="tabResults">Ranked Candidates (<span id="tabResultCount">0</span>)</button>
+                <button type="button" class="tab-btn" id="tabCheckpoints">Pipeline &amp; DB</button>
             </div>
 
             <div class="inspector-controls" id="shotControls">
@@ -142,6 +143,47 @@
             <!-- Scrollable Cards Container for Ranked Search Candidates -->
             <div class="candidate-list" id="candidateList" style="display: none;">
                 <div class="empty-candidate-state" id="emptyCandidateState">Enter a natural language query above and click Search to retrieve top-ranked moments.</div>
+            </div>
+
+            <!-- Scrollable Container for Pipeline Checkpoints & Database Matrix -->
+            <div class="checkpoint-pane" id="checkpointPane" style="display: none;">
+                <div class="db-summary-cards">
+                    <div class="db-stat-card">
+                        <span class="db-stat-num" id="dbTotalVideos">0</span>
+                        <span class="db-stat-label">Videos</span>
+                    </div>
+                    <div class="db-stat-card">
+                        <span class="db-stat-num" id="dbTotalShots">0</span>
+                        <span class="db-stat-label">Shots</span>
+                    </div>
+                    <div class="db-stat-card">
+                        <span class="db-stat-num" id="dbTotalKeyframes">0</span>
+                        <span class="db-stat-label">Keyframes</span>
+                    </div>
+                </div>
+
+                <div class="checkpoint-header-row">
+                    <div class="db-table-title">Pipeline Checkpoints Matrix</div>
+                    <button type="button" class="btn-refresh-db" id="btnRefreshDb">&#8635; Refresh</button>
+                </div>
+
+                <div class="checkpoint-table-wrap">
+                    <table class="checkpoint-table" id="checkpointTable">
+                        <thead>
+                            <tr>
+                                <th>Video ID</th>
+                                <th>Shots</th>
+                                <th>Keyframes</th>
+                                <th>Visual</th>
+                                <th>Speech</th>
+                                <th>OCR</th>
+                            </tr>
+                        </thead>
+                        <tbody id="checkpointTableBody">
+                            <tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading database checkpoints...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
     </main>

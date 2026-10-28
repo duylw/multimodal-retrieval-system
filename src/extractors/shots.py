@@ -3,12 +3,11 @@ Shot boundary detection extractor using SceneDetect with time-based normalizatio
 Handles diverse video framerates (FPS), frame-skipping downsampling, and SQLite caching.
 """
 
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import cv2
 from loguru import logger
-from scenedetect import ContentDetector, AdaptiveDetector, SceneManager, open_video
+from scenedetect import ContentDetector, SceneManager, open_video
 
 from src.common.base import BaseExtractor
 from src.common.config import ConfigManager
@@ -44,11 +43,13 @@ class ShotDetector(BaseExtractor):
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        finally:
+            cap.release()
 
         if fps <= 0:
             fps = 25.0
@@ -132,7 +133,6 @@ class ShotDetector(BaseExtractor):
             scene_list = scene_manager.get_scene_list()
         except Exception as e:
             logger.error(f"[ERROR] Scene detection failed for {video_id}: {e}")
-            # Fallback: treat entire video as a single continuous shot
             scene_list = []
 
         shots: List[ShotRecord] = []
@@ -159,7 +159,6 @@ class ShotDetector(BaseExtractor):
 
                 # Filter out microscopic noise flashes (< min_shot_duration_sec)
                 if shot_dur < self.min_shot_duration_sec and shots:
-                    # Merge with previous shot
                     prev = shots[-1]
                     shots[-1] = ShotRecord(
                         video_id=video_id,
@@ -193,21 +192,7 @@ class ShotDetector(BaseExtractor):
 
         # 5. Persist to SQLite and mark stage complete
         self.db.save_shots(shots)
-        self.db.set_stage_status(video_id, "shots", "done")
+        self.db.set_checkpoint(video_id, "shots", "COMPLETED", artifact_count=len(shots))
         logger.info(f"[OK] Successfully detected and saved {len(shots)} shots for {video_id}.")
 
         return shots
-
-
-if __name__ == "__main__":
-    sample_video = "data/raw_videos/L13_V001.mp4"
-    logger.info(f"[INFO] Testing ShotDetector on sample video: {sample_video}")
-
-    detector = ShotDetector()
-    detected_shots = detector.extract(sample_video, force_recompute=True)
-
-    print(f"\nTotal Shots Detected: {len(detected_shots)}")
-    print("Sample Shots (First 5):")
-    for s in detected_shots[:5]:
-        print(f"  Shot #{s.shot_id:03d} | Frames: {s.start_frame:05d} -> {s.end_frame:05d} | "
-              f"Time: {s.start_sec:06.2f}s -> {s.end_sec:06.2f}s ({s.duration_sec:.2f}s)")

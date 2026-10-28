@@ -1,6 +1,6 @@
 """
-SQLite database manager for video metadata, shot boundaries, and extracted keyframes.
-Handles persistence, retrieval, and resumption checkpoints.
+SQLite database manager for video metadata, shot boundaries, keyframes, and pipeline checkpoints.
+Handles persistence, retrieval, fault-tolerant state tracking, and atomic rollbacks.
 """
 
 import sqlite3
@@ -74,39 +74,113 @@ class MetadataDB:
                 );
             """)
 
-            # Pipeline execution checkpoints for fault tolerance and resume
+            # Pipeline execution checkpoints for fault tolerance, status tracking, and resumption
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS checkpoints (
+                CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
                     video_id TEXT NOT NULL,
                     stage_name TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    artifact_count INTEGER DEFAULT 0,
+                    error_message TEXT,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (video_id, stage_name)
                 );
             """)
             conn.commit()
 
+    # =========================================================================
+    # Pipeline Checkpointing & Fault Tolerance APIs
+    # =========================================================================
+
     def is_stage_completed(self, video_id: str, stage_name: str) -> bool:
-        """Checks whether a given pipeline stage has completed for a video."""
+        """Checks whether a given pipeline stage has completed successfully for a video."""
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT status FROM checkpoints WHERE video_id = ? AND stage_name = ?;",
+                "SELECT status FROM pipeline_checkpoints WHERE video_id = ? AND stage_name = ?;",
                 (video_id, stage_name)
             )
             row = cursor.fetchone()
-            return row is not None and row["status"] == "done"
+            return row is not None and row["status"].upper() == "COMPLETED"
 
-    def set_stage_status(self, video_id: str, stage_name: str, status: str = "done") -> None:
+    def set_checkpoint(
+        self,
+        video_id: str,
+        stage_name: str,
+        status: str,
+        artifact_count: int = 0,
+        error_message: Optional[str] = None
+    ) -> None:
         """Updates or inserts the status of a pipeline stage."""
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO checkpoints (video_id, stage_name, status, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO pipeline_checkpoints (video_id, stage_name, status, artifact_count, error_message, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(video_id, stage_name) DO UPDATE SET
                     status = excluded.status,
+                    artifact_count = excluded.artifact_count,
+                    error_message = excluded.error_message,
                     updated_at = CURRENT_TIMESTAMP;
-            """, (video_id, stage_name, status))
+            """, (video_id, stage_name, status.upper(), artifact_count, error_message))
             conn.commit()
+
+    def get_checkpoint(self, video_id: str, stage_name: str) -> Optional[Dict[str, Any]]:
+        """Retrieves checkpoint info for a specific video and stage."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM pipeline_checkpoints WHERE video_id = ? AND stage_name = ?;",
+                (video_id, stage_name)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_all_checkpoints(self, video_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieves all pipeline checkpoints, optionally filtered by video_id."""
+        with self._get_connection() as conn:
+            if video_id:
+                cursor = conn.execute(
+                    "SELECT * FROM pipeline_checkpoints WHERE video_id = ? ORDER BY stage_name ASC;",
+                    (video_id,)
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT * FROM pipeline_checkpoints ORDER BY video_id ASC, stage_name ASC;"
+                )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def reset_stage(self, video_id: str, stage_name: str) -> None:
+        """Deletes checkpoint record for a given stage, resetting it to PENDING."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "DELETE FROM pipeline_checkpoints WHERE video_id = ? AND stage_name = ?;",
+                (video_id, stage_name)
+            )
+            conn.commit()
+
+    # =========================================================================
+    # Atomic Rollback & Deletion Helpers
+    # =========================================================================
+
+    def delete_shots(self, video_id: str) -> None:
+        """Deletes all shots for a given video (cascades to keyframes)."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM shots WHERE video_id = ?;", (video_id,))
+            conn.commit()
+
+    def delete_keyframes(self, video_id: str) -> None:
+        """Deletes all keyframe records for a given video."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM keyframes WHERE video_id = ?;", (video_id,))
+            conn.commit()
+
+    def delete_video(self, video_id: str) -> None:
+        """Deletes a video catalog record and all associated relational records."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM videos WHERE video_id = ?;", (video_id,))
+            conn.commit()
+
+    # =========================================================================
+    # Data Access APIs (Videos, Shots, Keyframes)
+    # =========================================================================
 
     def save_video(
         self,
@@ -226,3 +300,20 @@ class MetadataDB:
             cursor = conn.execute("SELECT * FROM videos WHERE video_id = ?;", (video_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def get_database_summary(self) -> Dict[str, Any]:
+        """Returns aggregate row counts and checkpoint breakdown across all tables."""
+        with self._get_connection() as conn:
+            video_cnt = conn.execute("SELECT COUNT(*) FROM videos;").fetchone()[0]
+            shot_cnt = conn.execute("SELECT COUNT(*) FROM shots;").fetchone()[0]
+            kf_cnt = conn.execute("SELECT COUNT(*) FROM keyframes;").fetchone()[0]
+            cp_rows = conn.execute(
+                "SELECT video_id, stage_name, status, artifact_count, updated_at FROM pipeline_checkpoints;"
+            ).fetchall()
+
+            return {
+                "total_videos": video_cnt,
+                "total_shots": shot_cnt,
+                "total_keyframes": kf_cnt,
+                "checkpoints": [dict(r) for r in cp_rows],
+            }

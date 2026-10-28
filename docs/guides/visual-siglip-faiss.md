@@ -13,14 +13,21 @@
 
 ## 2. Quick Start CLI
 
-### Execute visual pipeline with text query and ground truth evaluation:
+### Step 1: Extract visual embeddings and save per-video feature cache (.npz):
 ```powershell
-uv run python -m src.extractors.run_visual_pipeline --video-id L13_V001 --query "cận cảnh đĩa thức ăn trên bàn" --eval-gt
+# Single video execution (requires Stage 2 keyframes completed)
+uv run python -m src.extractors.run_visual --video-id L13_V001
+
+# Batch directory execution
+uv run python -m src.extractors.run_visual --video-dir data/raw_videos/
+
+# Force re-extraction
+uv run python -m src.extractors.run_visual --video-id L13_V001 --force
 ```
 
-### Force re-extraction from scratch (ignoring existing FAISS index):
+### Step 2: Build unified FAISS index from all feature caches (one-pass build):
 ```powershell
-uv run python -m src.extractors.run_visual_pipeline --video-id L13_V001 --force
+uv run python -m src.indexers.build_indices --modality visual
 ```
 
 ### Python API Usage:

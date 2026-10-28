@@ -314,6 +314,40 @@ def unload_search_model() -> Dict[str, str]:
     return {"status": "ok", "message": "GPU VRAM released"}
 
 
+@app.get("/api/db/summary")
+def get_db_summary() -> Dict[str, Any]:
+    """Returns database summary, table counts, and all pipeline checkpoints."""
+    db = get_db()
+    summary = db.get_database_summary()
+
+    raw_files = sorted([f.stem for f in VIDEOS_DIR.glob("*.mp4")]) if VIDEOS_DIR.exists() else []
+
+    # Matrix of stages for each video
+    stages_order = ["shots", "keyframes", "visual", "speech", "ocr"]
+    cp_by_video: Dict[str, Dict[str, Any]] = {}
+    for vid in raw_files:
+        cp_by_video[vid] = {s: {"status": "PENDING", "count": 0} for s in stages_order}
+
+    for cp in summary.get("checkpoints", []):
+        v = cp["video_id"]
+        s = cp["stage_name"]
+        if v not in cp_by_video:
+            cp_by_video[v] = {st: {"status": "PENDING", "count": 0} for st in stages_order}
+        cp_by_video[v][s] = {
+            "status": cp["status"],
+            "count": cp.get("artifact_count", 0),
+            "updated_at": cp.get("updated_at", ""),
+            "error": cp.get("error_message")
+        }
+
+    matrix = []
+    for vid, stages in cp_by_video.items():
+        matrix.append({"video_id": vid, "stages": stages})
+
+    summary["matrix"] = matrix
+    return summary
+
+
 # Mount static files and root SPA route
 if (STATIC_DIR / "index.html").exists():
     @app.get("/")

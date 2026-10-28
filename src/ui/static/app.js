@@ -43,10 +43,13 @@ const btnClearQuery = document.getElementById("btnClearQuery");
 const btnSearch = document.getElementById("btnSearch");
 const tabShots = document.getElementById("tabShots");
 const tabResults = document.getElementById("tabResults");
+const tabCheckpoints = document.getElementById("tabCheckpoints");
 const tabShotCount = document.getElementById("tabShotCount");
 const tabResultCount = document.getElementById("tabResultCount");
 const shotControls = document.getElementById("shotControls");
 const candidateList = document.getElementById("candidateList");
+const checkpointPane = document.getElementById("checkpointPane");
+const btnRefreshDb = document.getElementById("btnRefreshDb");
 
 /**
  * Formats seconds into MM:SS.ss string.
@@ -416,22 +419,70 @@ function jumpCurrentCenter() {
 }
 
 /**
- * Switches right pane view between 'shots' and 'results'.
+ * Switches right pane view between 'shots', 'results', and 'checkpoints'.
  */
 function switchTab(tabName) {
     state.activeTab = tabName;
-    if (tabName === "shots") {
-        tabShots.classList.add("active");
-        tabResults.classList.remove("active");
-        shotControls.style.display = "flex";
-        shotList.style.display = "flex";
-        candidateList.style.display = "none";
-    } else {
-        tabShots.classList.remove("active");
-        tabResults.classList.add("active");
-        shotControls.style.display = "none";
-        shotList.style.display = "none";
-        candidateList.style.display = "flex";
+    tabShots.classList.toggle("active", tabName === "shots");
+    tabResults.classList.toggle("active", tabName === "results");
+    if (tabCheckpoints) tabCheckpoints.classList.toggle("active", tabName === "checkpoints");
+
+    shotControls.style.display = tabName === "shots" ? "flex" : "none";
+    shotList.style.display = tabName === "shots" ? "flex" : "none";
+    candidateList.style.display = tabName === "results" ? "flex" : "none";
+    if (checkpointPane) checkpointPane.style.display = tabName === "checkpoints" ? "flex" : "none";
+
+    if (tabName === "checkpoints") {
+        loadCheckpoints();
+    }
+}
+
+/**
+ * Loads database statistics and pipeline checkpoints matrix from backend.
+ */
+async function loadCheckpoints() {
+    try {
+        const res = await fetch("/api/db/summary");
+        if (!res.ok) throw new Error("Failed to load DB summary");
+        const data = await res.json();
+
+        const elVid = document.getElementById("dbTotalVideos");
+        const elShots = document.getElementById("dbTotalShots");
+        const elKfs = document.getElementById("dbTotalKeyframes");
+        const tbody = document.getElementById("checkpointTableBody");
+
+        if (elVid) elVid.textContent = data.total_videos;
+        if (elShots) elShots.textContent = data.total_shots;
+        if (elKfs) elKfs.textContent = data.total_keyframes;
+
+        if (!tbody) return;
+        tbody.innerHTML = "";
+
+        const matrix = data.matrix || [];
+        if (matrix.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">No videos found in raw_videos/</td></tr>`;
+            return;
+        }
+
+        const stages = ["shots", "keyframes", "visual", "speech", "ocr"];
+
+        matrix.forEach(row => {
+            const tr = document.createElement("tr");
+            let tdHtml = `<td><strong>${row.video_id}</strong></td>`;
+
+            stages.forEach(st => {
+                const sObj = row.stages[st] || { status: "PENDING", count: 0 };
+                const stLower = (sObj.status || "PENDING").toLowerCase();
+                let countStr = sObj.count > 0 ? ` (${sObj.count})` : "";
+                tdHtml += `<td><span class="cp-badge ${stLower}">${sObj.status}${countStr}</span></td>`;
+            });
+
+            tr.innerHTML = tdHtml;
+            tbody.appendChild(tr);
+        });
+
+    } catch (err) {
+        console.error("Error loading checkpoints:", err);
     }
 }
 
@@ -616,6 +667,8 @@ function setupEventListeners() {
     btnClearQuery.addEventListener("click", clearVisualSearch);
     tabShots.addEventListener("click", () => switchTab("shots"));
     tabResults.addEventListener("click", () => switchTab("results"));
+    if (tabCheckpoints) tabCheckpoints.addEventListener("click", () => switchTab("checkpoints"));
+    if (btnRefreshDb) btnRefreshDb.addEventListener("click", loadCheckpoints);
 }
 
 // Start app

@@ -72,16 +72,13 @@ class KeyframeExtractor(BaseExtractor):
         start = shot.start_sec
 
         if dur < 3.0:
-            # Short shot: 1 frame in exact middle
             return [(start + 0.5 * dur, True)]
         elif dur <= 8.0:
-            # Medium shot: 2 frames at 33% and 66%
             return [
                 (start + 0.33 * dur, False),
                 (start + 0.66 * dur, True)
             ]
         else:
-            # Long shot: sample every 3.5s, up to max_keyframes_per_shot
             num_samples = min(self.max_keyframes_per_shot, max(2, int(dur / 3.5)))
             step = dur / (num_samples + 1)
             samples = []
@@ -126,112 +123,96 @@ class KeyframeExtractor(BaseExtractor):
         if not cap.isOpened():
             raise ValueError(f"Could not open video: {video_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0:
-            fps = 25.0
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        output_dir = self.keyframes_base_dir / video_id
-        output_dir.mkdir(parents=True, exist_ok=True)
-
         extracted_keyframes: List[KeyframeRecord] = []
-        keyframe_counter = 1
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            if fps <= 0:
+                fps = 25.0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        logger.info(f"[INFO] Extracting adaptive keyframes for {video_id} ({len(shots)} shots)...")
+            output_dir = self.keyframes_base_dir / video_id
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        for shot in shots:
-            sample_specs = self._calculate_sample_timestamps(shot)
-            previous_hist: Optional[np.ndarray] = None
+            keyframe_counter = 1
+            logger.info(f"[INFO] Extracting adaptive keyframes for {video_id} ({len(shots)} shots)...")
 
-            for target_sec, is_center in sample_specs:
-                target_frame_idx = min(total_frames - 1, max(0, int(round(target_sec * fps))))
+            for shot in shots:
+                sample_specs = self._calculate_sample_timestamps(shot)
+                previous_hist: Optional[np.ndarray] = None
 
-                # Seek directly to target frame
-                cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_idx)
-                ret, frame = cap.read()
-                if not ret or frame is None:
-                    continue
+                for target_sec, is_center in sample_specs:
+                    target_frame_idx = min(total_frames - 1, max(0, int(round(target_sec * fps))))
 
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_idx)
+                    ret, frame = cap.read()
+                    if not ret or frame is None:
+                        continue
 
-                # Filter 1: Blank / Black frame filter
-                brightness = float(np.mean(gray))
-                if brightness < self.min_brightness:
-                    continue
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                # Filter 2: Blur detection with adjacent frame search
-                blur_score = self._compute_blur_score(gray)
-                best_frame = frame
-                best_score = blur_score
-                best_frame_idx = target_frame_idx
+                    # Filter 1: Blank / Black frame filter
+                    brightness = float(np.mean(gray))
+                    if brightness < self.min_brightness:
+                        continue
 
-                if blur_score < self.blur_threshold:
-                    # Search +/- 4 frames nearby to find a sharper frame
-                    for offset in [-4, -2, 2, 4]:
-                        neighbor_idx = target_frame_idx + offset
-                        if 0 <= neighbor_idx < total_frames:
-                            cap.set(cv2.CAP_PROP_POS_FRAMES, neighbor_idx)
-                            n_ret, n_frame = cap.read()
-                            if n_ret and n_frame is not None:
-                                n_gray = cv2.cvtColor(n_frame, cv2.COLOR_BGR2GRAY)
-                                n_score = self._compute_blur_score(n_gray)
-                                if n_score > best_score:
-                                    best_score = n_score
-                                    best_frame = n_frame
-                                    best_frame_idx = neighbor_idx
+                    # Filter 2: Blur detection with adjacent frame search
+                    blur_score = self._compute_blur_score(gray)
+                    best_frame = frame
+                    best_score = blur_score
+                    best_frame_idx = target_frame_idx
 
-                # Filter 3: Intra-shot deduplication (histogram correlation)
-                curr_hist = self._compute_hsv_hist(best_frame)
-                if previous_hist is not None:
-                    similarity = cv2.compareHist(previous_hist, curr_hist, cv2.HISTCMP_CORREL)
-                    if similarity > self.duplicate_similarity:
-                        continue  # Skip redundant keyframe within the same shot
-                previous_hist = curr_hist
+                    if blur_score < self.blur_threshold:
+                        for offset in [-4, -2, 2, 4]:
+                            neighbor_idx = target_frame_idx + offset
+                            if 0 <= neighbor_idx < total_frames:
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, neighbor_idx)
+                                n_ret, n_frame = cap.read()
+                                if n_ret and n_frame is not None:
+                                    n_gray = cv2.cvtColor(n_frame, cv2.COLOR_BGR2GRAY)
+                                    n_score = self._compute_blur_score(n_gray)
+                                    if n_score > best_score:
+                                        best_score = n_score
+                                        best_frame = n_frame
+                                        best_frame_idx = neighbor_idx
 
-                # Resize and persist keyframe to disk
-                resized = self._resize_frame(best_frame)
-                actual_sec = best_frame_idx / fps
-                kf_filename = f"shot_{shot.shot_id:04d}_t{actual_sec:07.2f}.jpg"
-                kf_filepath = output_dir / kf_filename
+                    # Filter 3: Intra-shot deduplication (histogram correlation)
+                    curr_hist = self._compute_hsv_hist(best_frame)
+                    if previous_hist is not None:
+                        similarity = cv2.compareHist(previous_hist, curr_hist, cv2.HISTCMP_CORREL)
+                        if similarity > self.duplicate_similarity:
+                            continue
+                    previous_hist = curr_hist
 
-                encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
-                cv2.imwrite(str(kf_filepath), resized, encode_params)
+                    # Resize and persist keyframe to disk
+                    resized = self._resize_frame(best_frame)
+                    actual_sec = best_frame_idx / fps
+                    kf_filename = f"shot_{shot.shot_id:04d}_t{actual_sec:07.2f}.jpg"
+                    kf_filepath = output_dir / kf_filename
 
-                kf_id = f"{video_id}_{keyframe_counter:05d}"
-                extracted_keyframes.append(KeyframeRecord(
-                    keyframe_id=kf_id,
-                    video_id=video_id,
-                    shot_id=shot.shot_id,
-                    frame_idx=best_frame_idx,
-                    timestamp_sec=actual_sec,
-                    file_path=str(kf_filepath.resolve()),
-                    is_shot_center=is_center,
-                    blur_score=best_score
-                ))
-                keyframe_counter += 1
+                    encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+                    cv2.imwrite(str(kf_filepath), resized, encode_params)
 
-        cap.release()
+                    kf_id = f"{video_id}_{keyframe_counter:05d}"
+                    extracted_keyframes.append(KeyframeRecord(
+                        keyframe_id=kf_id,
+                        video_id=video_id,
+                        shot_id=shot.shot_id,
+                        frame_idx=best_frame_idx,
+                        timestamp_sec=actual_sec,
+                        file_path=str(kf_filepath.resolve()),
+                        is_shot_center=is_center,
+                        blur_score=best_score
+                    ))
+                    keyframe_counter += 1
+        finally:
+            cap.release()
 
         # 4. Batch persist to SQLite and mark checkpoint
         self.db.save_keyframes(extracted_keyframes)
-        self.db.set_stage_status(video_id, "keyframes", "done")
+        self.db.set_checkpoint(video_id, "keyframes", "COMPLETED", artifact_count=len(extracted_keyframes))
 
         logger.info(
             f"[OK] Extracted {len(extracted_keyframes)} keyframes for {video_id} "
             f"(Avg: {len(extracted_keyframes)/max(1, len(shots)):.2f} frames/shot)."
         )
         return extracted_keyframes
-
-
-if __name__ == "__main__":
-    sample_video = "data/raw_videos/L13_V001.mp4"
-    logger.info(f"[INFO] Testing KeyframeExtractor on sample video: {sample_video}")
-
-    extractor = KeyframeExtractor()
-    keyframes = extractor.extract(sample_video, force_recompute=True)
-
-    print(f"\nTotal Keyframes Extracted: {len(keyframes)}")
-    print("Sample Keyframes (First 5):")
-    for k in keyframes[:5]:
-        print(f"  KF ID: {k.keyframe_id} | Shot #{k.shot_id:03d} | Frame: {k.frame_idx:05d} | "
-              f"Time: {k.timestamp_sec:06.2f}s | Blur: {k.blur_score:.1f} | Center: {k.is_shot_center} | Path: {Path(k.file_path).name}")

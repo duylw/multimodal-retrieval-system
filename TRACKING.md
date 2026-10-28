@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 1: Baseline Minimum (Visual Pipeline & Core Indexing)**
-* **Overall Progress:** `25%`
-* **Current Focus:** Completed Visual Feature Extraction with SigLIP2, Shot-Level Pooling, FAISS Indexing, and Ground Truth Evaluation (Task 02). Ready for Speech Transcription with faster-whisper (Task 03).
+* **Current Stage:** **Milestone 2: Text Channel Integration (Speech & OCR)**
+* **Overall Progress:** `35%`
+* **Current Focus:** Completed Task 02B Architectural Refactoring & Fault-Tolerance Infrastructure. Pipeline state tracking in SQLite, standalone Layer 3 runners (`run_shots.py`, `run_keyframes.py`, `run_visual.py`), and decoupled FAISS builder (`build_indices.py`) verified on single-video and batch directory. Ready for Task 03 (Speech ASR with faster-whisper).
 
 ---
 
@@ -23,8 +23,8 @@
 | **Task 01** | Shot Detection & Keyframe Extraction | SceneDetect / TransNetV2, Laplacian blur filter, color deduplication | **Completed** | [task-01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md) | `shots.py`, `keyframes.py`, SQLite `shots` table |
 | **Task 01B** | Shot & Keyframe Debug Inspector | FastAPI + Range 206, video timeline sync, two-way shot & keyframe inspection | **Completed** | [task-01b](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md) | `debug_server.py`, SPA debug interface |
 | **Task 02** | Visual SigLIP2 & FAISS | SigLIP2 embeddings, shot-level mean pooling, FAISS indexing | **Completed** | [task-02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md) | `visual.py`, `visual_siglip2.index` |
-| **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **In Progress** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
-| **Task 03** | Whisper Speech & Hybrid Index | Silero VAD + faster-whisper int8, BM25 + bge-m3 dense | **Pending** | [task-03](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md) | `speech.py`, SQLite `transcripts`, `asr.index` |
+| **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **Completed** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
+| **Task 03** | Whisper Speech & Hybrid Index | Silero VAD + faster-whisper int8, BM25 + bge-m3 dense | **Ready** | [task-03](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md) | `speech.py`, SQLite `transcripts`, `asr.index` |
 | **Task 04** | On-screen Text PaddleOCR | Text keyframe detector, PaddleOCR on CPU, SQLite FTS5 | **Pending** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, SQLite `ocr_fts` virtual table |
 | **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Pending** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
 | **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
@@ -79,14 +79,20 @@
 * **Oct 28, 2026:**
   * Defined two core engineering skills: `fault-tolerant-checkpointing` and `modular-code-architecture`.
   * Added Section 6 UI Testing Protocol to [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md) strictly prioritizing manual testing over browser subagents.
-  * Created [Task 02B: Architecture Refactoring & Pipeline Fault-Tolerance Infrastructure](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) to eliminate architectural technical debt before proceeding to Speech ASR.
+  * Implemented and completed [Task 02B: Architecture Refactoring & Pipeline Fault-Tolerance Infrastructure](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md):
+    * Upgraded [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py) with `pipeline_checkpoints` table and CRUD methods.
+    * Decoupled Layer 2 Core Engines (`shots.py`, `keyframes.py`, `visual.py`) from CLI parsing.
+    * Built standardized Layer 3 Runners (`run_shots.py`, `run_keyframes.py`, `run_visual.py`) with pre-flight guards, atomic rollbacks, and batch progress summaries.
+    * Created standalone index builder [src/indexers/build_indices.py](file:///d:/UIT/TX/doan/src/indexers/build_indices.py) to decouple dense feature caching (`.npz`) from FAISS indexing.
+    * Verified single-video idempotency, dependency guards, and fast atomic FAISS rebuilding (0.06s).
+    * Integrated interactive **Pipeline Checkpoints & DB Inspector** tab on Web Debug UI (`http://127.0.0.1:8000`).
 
 ---
 
 ## 5. Next Action
-* **Execute [Task 02B: Architecture Refactoring & Pipeline Fault-Tolerance Infrastructure](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md):**
-  1. Add `pipeline_checkpoints` table and CRUD helper methods to [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py).
-  2. Refactor Layer 2 engines (`shots.py`, `keyframes.py`, `visual.py`) to strip top-level CLI logic.
-  3. Implement standardized Layer 3 runners (`run_shots.py`, `run_keyframes.py`, `run_visual.py`) supporting `--video-id`, `--video-dir`, and pre-flight dependency guards.
-  4. Implement standalone index builder [src/indexers/build_indices.py](file:///d:/UIT/TX/doan/src/indexers/build_indices.py) to decouple feature extraction from FAISS indexing.
-  5. Verify single-video idempotency, directory batching, and failure rollback handlers.
+* **Execute [Task 03: Speech-to-Text Transcription with faster-whisper & Hybrid Indexing](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md):**
+  1. Implement `WhisperExtractor` engine in `src/extractors/speech.py` with `safe_unload()`.
+  2. Implement standardized CLI runner `src/extractors/run_speech.py` supporting `--video-id` and `--video-dir`.
+  3. Extract 16kHz audio from raw videos, filter with Silero-VAD, transcribe Vietnamese speech via `faster-whisper` (`large-v3-turbo`, `compute_type="int8"` on GPU), and immediately delete temporary WAV files.
+  4. Store timestamped transcripts in SQLite `transcripts` table and register checkpoint in `pipeline_checkpoints`.
+  5. Build hybrid text indices: BM25 lexical search + `BAAI/bge-m3` dense semantic vectors.

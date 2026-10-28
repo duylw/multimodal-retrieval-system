@@ -21,6 +21,8 @@ data/audio_temp/*
 !data/audio_temp/.gitkeep
 data/indices/*
 !data/indices/.gitkeep
+data/features/*
+!data/features/.gitkeep
 data/checkpoints/*
 !data/checkpoints/.gitkeep
 data/*.db

@@ -142,10 +142,8 @@ class VisualExtractor(BaseExtractor):
                     outputs = self.model(**inputs)
                     features = outputs.image_embeds if hasattr(outputs, "image_embeds") else outputs[0]
 
-                # Convert to float32 numpy
                 features_np = features.detach().cpu().to(torch.float32).numpy()
 
-                # L2 normalize
                 norms = np.linalg.norm(features_np, axis=-1, keepdims=True)
                 norms[norms == 0] = 1e-12
                 normed = features_np / norms
@@ -210,11 +208,9 @@ class VisualExtractor(BaseExtractor):
             if not indices:
                 continue
 
-            # Compute mean vector across intra-shot keyframes
             vecs = keyframe_embeddings[indices]
             mean_vec = np.mean(vecs, axis=0)
 
-            # Re-apply L2 normalization
             norm = np.linalg.norm(mean_vec)
             if norm > 0:
                 mean_vec = mean_vec / norm
@@ -238,7 +234,7 @@ class VisualExtractor(BaseExtractor):
 
     def is_already_processed(self, video_id: str) -> bool:
         """Checks whether visual embeddings have already been generated for this video."""
-        return self.db.is_stage_completed(video_id, "visual_embedding")
+        return self.db.is_stage_completed(video_id, "visual")
 
     def extract(self, video_path: str, **kwargs) -> List[Any]:
         """Standard BaseExtractor interface."""
@@ -256,11 +252,10 @@ class VisualExtractor(BaseExtractor):
     ) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
         """
         Full visual pipeline for a single video:
-        1. Checks checkpoint for resume.
-        2. Extracts L2-normalized embeddings for all keyframe images.
-        3. Computes shot-level pooled embeddings.
-        4. Concatenates individual + pooled vectors.
-        5. Updates database checkpoint.
+        1. Extracts L2-normalized embeddings for all keyframe images.
+        2. Computes shot-level pooled embeddings.
+        3. Concatenates individual + pooled vectors.
+        4. Updates database checkpoint.
         """
         if not keyframes:
             logger.warning(f"[WARNING] No keyframes provided for video {video_id}.")
@@ -298,7 +293,7 @@ class VisualExtractor(BaseExtractor):
         all_metadata = kf_meta + pooled_meta
 
         # 4. Mark checkpoint in SQLite
-        self.db.set_stage_status(video_id, "visual_embedding", "done")
+        self.db.set_checkpoint(video_id, "visual", "COMPLETED", artifact_count=len(all_embeddings))
         logger.info(
             f"[OK] Completed visual embedding for '{video_id}': {len(kf_embeddings)} keyframe vectors + {len(pooled_embeddings)} shot pooled vectors. Total: {len(all_embeddings)}"
         )
