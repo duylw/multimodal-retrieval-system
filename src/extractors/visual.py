@@ -4,6 +4,7 @@ Implements FP16 batch inference, L2 normalization, shot-level mean pooling, and 
 """
 
 import gc
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -11,6 +12,7 @@ import numpy as np
 import torch
 from loguru import logger
 from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 
 from src.common.base import BaseExtractor
 from src.common.config import ConfigManager
@@ -18,10 +20,36 @@ from src.common.types import KeyframeRecord, ShotRecord
 from src.indexers.metadata_db import MetadataDB
 
 
+class KeyframeDataset(Dataset):
+    """
+    Dataset for batch loading keyframe image files for visual feature extraction.
+    """
+
+    def __init__(self, image_paths: List[str]):
+        self.image_paths = image_paths
+
+    def __len__(self) -> int:
+        return len(self.image_paths)
+
+    def __getitem__(self, idx: int) -> Image.Image:
+        p = self.image_paths[idx]
+        try:
+            with Image.open(p) as img:
+                return img.convert("RGB")
+        except Exception as err:
+            logger.warning(f"[WARNING] Failed to open image {p}: {err}. Using black blank.")
+            return Image.new("RGB", (256, 256), (0, 0, 0))
+
+
+def _collate_pil_images(batch: List[Image.Image]) -> List[Image.Image]:
+    """Collates a list of PIL Images into a batch without default tensor conversion."""
+    return batch
+
+
 class VisualExtractor(BaseExtractor):
     """
     Extracts L2-normalized dense visual embeddings from keyframe images and text queries.
-    Enforces VRAM-safe batching (batch_size=4 or 8) and provides automatic fallback.
+    Uses SigLIP2-Base (86M params, 256x256, 768-dim) with PyTorch DataLoader batching.
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -30,21 +58,20 @@ class VisualExtractor(BaseExtractor):
         super().__init__(config)
 
         self.db = MetadataDB(self.config.get("paths", {}).get("metadata_db", "data/metadata.db"))
+        self.models_dir = self.config.get("paths", {}).get("models_dir", "models")
         self.visual_cfg = self.config.get("visual_model", {})
         self.primary_model_name = self.visual_cfg.get(
-            "primary_model", "google/siglip2-so400m-patch14-384"
+            "primary_model", "google/siglip2-base-patch16-256"
         )
-        self.fallback_model_name = self.visual_cfg.get(
-            "fallback_model", "google/siglip2-base-patch16-256"
-        )
-        self.batch_size = self.visual_cfg.get("batch_size", 4)
+        self.batch_size = self.visual_cfg.get("batch_size", 16)
+        self.num_workers = self.visual_cfg.get("num_workers", 0)
         self.use_fp16 = self.visual_cfg.get("use_fp16", True)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
         self.processor = None
         self.current_model_name = None
-        self.embedding_dim = 1152 if "so400m" in self.primary_model_name else 768
+        self.embedding_dim = 768
 
     def load_model(self, model_name: Optional[str] = None) -> None:
         """
@@ -58,11 +85,18 @@ class VisualExtractor(BaseExtractor):
         target_model = model_name or self.primary_model_name
         logger.info(f"[INFO] Loading visual model '{target_model}' on device: {self.device} (fp16={self.use_fp16})")
 
+        # Suppress Windows symlink warning and centralize Hugging Face cache to D: drive
+        os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+        models_dir_abs = os.path.abspath(self.models_dir)
+        os.environ["HF_HOME"] = models_dir_abs
+
         dtype = torch.float16 if (self.use_fp16 and self.device == "cuda") else torch.float32
 
         try:
-            self.processor = AutoProcessor.from_pretrained(target_model)
-            self.model = AutoModel.from_pretrained(target_model, torch_dtype=dtype).to(self.device)
+            self.processor = AutoProcessor.from_pretrained(target_model, cache_dir=models_dir_abs)
+            self.model = AutoModel.from_pretrained(
+                target_model, dtype=dtype, cache_dir=models_dir_abs
+            ).to(self.device)
             self.model.eval()
             self.current_model_name = target_model
 
@@ -74,16 +108,8 @@ class VisualExtractor(BaseExtractor):
             logger.info(f"[OK] Visual model loaded successfully. Embedding dimension: {self.embedding_dim}")
 
         except Exception as e:
-            if target_model != self.fallback_model_name:
-                logger.warning(
-                    f"[WARNING] Failed to load primary model '{target_model}': {e}. Falling back to '{self.fallback_model_name}'"
-                )
-                self.safe_unload()
-                self.batch_size = 16
-                self.load_model(self.fallback_model_name)
-            else:
-                logger.error(f"[ERROR] Failed to load fallback model: {e}")
-                raise e
+            logger.error(f"[ERROR] Failed to load visual model '{target_model}': {e}")
+            raise e
 
     def safe_unload(self) -> None:
         """
@@ -105,7 +131,7 @@ class VisualExtractor(BaseExtractor):
 
     def extract_image_embeddings(self, image_paths: List[str]) -> np.ndarray:
         """
-        Extracts L2-normalized embeddings for a list of image file paths.
+        Extracts L2-normalized embeddings for a list of image file paths using PyTorch DataLoader.
 
         Args:
             image_paths: List of absolute or relative paths to image files.
@@ -117,20 +143,19 @@ class VisualExtractor(BaseExtractor):
         if not image_paths:
             return np.empty((0, self.embedding_dim), dtype=np.float32)
 
+        dataset = KeyframeDataset(image_paths)
+        loader = DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=_collate_pil_images,
+        )
+
         all_embeddings = []
         dtype = torch.float16 if (self.use_fp16 and self.device == "cuda") else torch.float32
 
-        for i in range(0, len(image_paths), self.batch_size):
-            batch_paths = image_paths[i : i + self.batch_size]
-            batch_images = []
-            for p in batch_paths:
-                try:
-                    img = Image.open(p).convert("RGB")
-                    batch_images.append(img)
-                except Exception as err:
-                    logger.warning(f"[WARNING] Failed to open image {p}: {err}. Using black blank.")
-                    batch_images.append(Image.new("RGB", (384, 384), (0, 0, 0)))
-
+        for batch_images in loader:
             inputs = self.processor(images=batch_images, return_tensors="pt").to(self.device)
             if dtype == torch.float16:
                 inputs = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs.items()}

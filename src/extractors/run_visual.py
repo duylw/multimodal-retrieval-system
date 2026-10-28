@@ -50,6 +50,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force re-extraction and overwrite existing feature cache even if stage completed."
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Override batch size for visual embedding extraction."
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Override DataLoader worker count."
+    )
     return parser.parse_args()
 
 
@@ -137,6 +149,10 @@ def main() -> int:
     cfg = ConfigManager(args.config).config
     db = MetadataDB(cfg.get("paths", {}).get("metadata_db", "data/metadata.db"))
     extractor = VisualExtractor(config=cfg)
+    if args.batch_size is not None:
+        extractor.batch_size = args.batch_size
+    if args.num_workers is not None:
+        extractor.num_workers = args.num_workers
 
     raw_videos_dir = Path(cfg.get("paths", {}).get("raw_videos_dir", "data/raw_videos"))
     feature_dir = Path(cfg.get("paths", {}).get("features_dir", "data/features")) / "visual"

@@ -8,6 +8,7 @@ paths:
   indices_dir: "data/indices"
   metadata_db: "data/metadata.db"
   ground_truth_file: "data/ground_truth.json"
+  models_dir: "models"
 
 hardware:
   device: "cuda"
@@ -22,7 +23,7 @@ shot_detection:
   high_fps_threshold: 30 # trigger frame-skipping when input fps exceeds this value
 
 keyframe_selection:
-  max_keyframes_per_shot: 6
+  max_keyframes_per_shot: 3
   blur_threshold: 80.0
   min_brightness: 15.0
   duplicate_similarity_threshold: 0.95
@@ -30,9 +31,8 @@ keyframe_selection:
   jpeg_quality: 85
 
 visual_model:
-  primary_model: "google/siglip2-so400m-patch14-384"
-  fallback_model: "google/siglip2-base-patch16-256"
-  batch_size: 4
+  primary_model: "google/siglip2-base-patch16-256"
+  batch_size: 16
   use_fp16: true
 
 speech_model:

@@ -30,6 +30,8 @@ data/*.sqlite
 data/*.sqlite3
 
 # Ignore model weights and checkpoints
+models/*
+!models/.gitkeep
 *.pt
 *.pth
 *.bin

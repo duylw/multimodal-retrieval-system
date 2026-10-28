@@ -10,8 +10,8 @@
 ## 1. Overall Status
 
 * **Current Stage:** **Milestone 2: Text Channel Integration (Speech & OCR)**
-* **Overall Progress:** `35%`
-* **Current Focus:** Completed Task 02B Architectural Refactoring & Fault-Tolerance Infrastructure. Pipeline state tracking in SQLite, standalone Layer 3 runners (`run_shots.py`, `run_keyframes.py`, `run_visual.py`), and decoupled FAISS builder (`build_indices.py`) verified on single-video and batch directory. Ready for Task 03 (Speech ASR with faster-whisper).
+* **Overall Progress:** `40%`
+* **Current Focus:** Completed Task 02C Visual Extraction Optimization. Replaced heavy so400m model with `google/siglip2-base-patch16-256` (86M params, 768-dim), implemented PyTorch `DataLoader` batching in [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py), centralized all model weights to `models/` on drive D:, and slashed visual extraction time down to 66 seconds (5.5x speedup) on GTX 1650. Rebuilt FAISS index with 630 768-dim vectors in 0.05s. Ready for Task 03 (Speech ASR with faster-whisper).
 
 ---
 
@@ -24,6 +24,7 @@
 | **Task 01B** | Shot & Keyframe Debug Inspector | FastAPI + Range 206, video timeline sync, two-way shot & keyframe inspection | **Completed** | [task-01b](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md) | `debug_server.py`, SPA debug interface |
 | **Task 02** | Visual SigLIP2 & FAISS | SigLIP2 embeddings, shot-level mean pooling, FAISS indexing | **Completed** | [task-02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md) | `visual.py`, `visual_siglip2.index` |
 | **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **Completed** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
+| **Task 02C** | Visual DataLoader & SigLIP2-Base | Switch to SigLIP2-Base, PyTorch DataLoader num_workers=2, models/ D: drive centralization | **Completed** | [task-02c](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md) | SigLIP2-Base DataLoader pipeline, `models/`, benchmark report |
 | **Task 03** | Whisper Speech & Hybrid Index | Silero VAD + faster-whisper int8, BM25 + bge-m3 dense | **Ready** | [task-03](file:///d:/UIT/TX/doan/tasks/task-03-asr-whisper.md) | `speech.py`, SQLite `transcripts`, `asr.index` |
 | **Task 04** | On-screen Text PaddleOCR | Text keyframe detector, PaddleOCR on CPU, SQLite FTS5 | **Pending** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, SQLite `ocr_fts` virtual table |
 | **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Pending** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
@@ -86,6 +87,14 @@
     * Created standalone index builder [src/indexers/build_indices.py](file:///d:/UIT/TX/doan/src/indexers/build_indices.py) to decouple dense feature caching (`.npz`) from FAISS indexing.
     * Verified single-video idempotency, dependency guards, and fast atomic FAISS rebuilding (0.06s).
     * Integrated interactive **Pipeline Checkpoints & DB Inspector** tab on Web Debug UI (`http://127.0.0.1:8000`).
+  * Implemented and completed [Task 02C: Visual Feature Extraction Performance Optimization with SigLIP2-Base & DataLoader](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md):
+    * Completely eliminated the heavy `siglip2-so400m` model; established `google/siglip2-base-patch16-256` (86M params, 768-dim) as the primary visual model.
+    * Centralized all Hugging Face model weights to `models/` on drive D: (`configs/default_config.yaml`).
+    * Implemented multithreaded PyTorch `DataLoader` with `KeyframeDataset` and `_collate_pil_images` in [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py).
+    * Added CLI arguments `--batch-size` and `--num-workers` to [src/extractors/run_visual.py](file:///d:/UIT/TX/doan/src/extractors/run_visual.py).
+    * Extracted 338 keyframes for `L13_V001` in 27s; visual embedding for 338 keyframes + 292 shot-pooled vectors (630 total vectors) completed in 66s on GTX 1650 (down from ~330s, >5x speedup; peak VRAM < 600MB).
+    * Rebuilt FAISS visual index in 0.05s with 768-dim vectors; verified dual-granularity search on Vietnamese and English queries.
+    * Updated documentation [docs/guides/visual-siglip-faiss.md](file:///d:/UIT/TX/doan/docs/guides/visual-siglip-faiss.md).
 
 ---
 
