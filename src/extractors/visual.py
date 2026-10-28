@@ -204,59 +204,6 @@ class VisualExtractor(BaseExtractor):
 
             return feat_np
 
-    def pool_shot_embeddings(
-        self,
-        shots: List[ShotRecord],
-        keyframes: List[KeyframeRecord],
-        keyframe_embeddings: np.ndarray,
-    ) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
-        """
-        Computes shot-level average embeddings via mean pooling across intra-shot keyframes.
-
-        Args:
-            shots: List of shot records.
-            keyframes: List of keyframe records corresponding to the embeddings array.
-            keyframe_embeddings: Numpy array of keyframe vectors.
-
-        Returns:
-            Tuple of (pooled_embeddings_array, list_of_shot_metadata).
-        """
-        shot_to_indices = {}
-        for idx, kf in enumerate(keyframes):
-            shot_to_indices.setdefault(kf.shot_id, []).append(idx)
-
-        pooled_vecs = []
-        pooled_meta = []
-
-        for shot in shots:
-            indices = shot_to_indices.get(shot.shot_id, [])
-            if not indices:
-                continue
-
-            vecs = keyframe_embeddings[indices]
-            mean_vec = np.mean(vecs, axis=0)
-
-            norm = np.linalg.norm(mean_vec)
-            if norm > 0:
-                mean_vec = mean_vec / norm
-
-            pooled_vecs.append(mean_vec)
-            pooled_meta.append({
-                "video_id": shot.video_id,
-                "shot_id": shot.shot_id,
-                "keyframe_id": None,
-                "timestamp_sec": round((shot.start_sec + shot.end_sec) / 2.0, 2),
-                "start_sec": shot.start_sec,
-                "end_sec": shot.end_sec,
-                "duration_sec": shot.duration_sec,
-                "is_shot_pooled": True,
-                "keyframe_count": len(indices),
-            })
-
-        if pooled_vecs:
-            return np.vstack(pooled_vecs), pooled_meta
-        return np.empty((0, self.embedding_dim), dtype=np.float32), []
-
     def is_already_processed(self, video_id: str) -> bool:
         """Checks whether visual embeddings have already been generated for this video."""
         return self.db.is_stage_completed(video_id, "visual")
@@ -278,9 +225,8 @@ class VisualExtractor(BaseExtractor):
         """
         Full visual pipeline for a single video:
         1. Extracts L2-normalized embeddings for all keyframe images.
-        2. Computes shot-level pooled embeddings.
-        3. Concatenates individual + pooled vectors.
-        4. Updates database checkpoint.
+        2. Associates temporal boundaries from shots.
+        3. Updates database checkpoint.
         """
         if not keyframes:
             logger.warning(f"[WARNING] No keyframes provided for video {video_id}.")
@@ -310,17 +256,10 @@ class VisualExtractor(BaseExtractor):
                 "is_shot_pooled": False,
             })
 
-        # 2. Compute shot-level pooled vectors
-        pooled_embeddings, pooled_meta = self.pool_shot_embeddings(shots, keyframes, kf_embeddings)
-
-        # 3. Concatenate vectors and metadata
-        all_embeddings = np.vstack([kf_embeddings, pooled_embeddings])
-        all_metadata = kf_meta + pooled_meta
-
-        # 4. Mark checkpoint in SQLite
-        self.db.set_checkpoint(video_id, "visual", "COMPLETED", artifact_count=len(all_embeddings))
+        # 2. Mark checkpoint in SQLite
+        self.db.set_checkpoint(video_id, "visual", "COMPLETED", artifact_count=len(kf_embeddings))
         logger.info(
-            f"[OK] Completed visual embedding for '{video_id}': {len(kf_embeddings)} keyframe vectors + {len(pooled_embeddings)} shot pooled vectors. Total: {len(all_embeddings)}"
+            f"[OK] Completed visual embedding for '{video_id}': {len(kf_embeddings)} keyframe vectors."
         )
 
-        return all_embeddings, all_metadata
+        return kf_embeddings, kf_meta
