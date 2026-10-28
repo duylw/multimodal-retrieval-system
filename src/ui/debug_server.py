@@ -217,7 +217,8 @@ _visual_extractor: Optional[Any] = None
 def search_visual(
     query: str,
     video_id: Optional[str] = None,
-    top_k: int = 20
+    top_k: int = 20,
+    dedup: bool = True,
 ) -> Dict[str, Any]:
     """Searches visual index using natural language text query via SigLIP2."""
     global _vector_index, _visual_extractor
@@ -246,22 +247,31 @@ def search_visual(
         _visual_extractor.load_model()
 
     q_vec = _visual_extractor.extract_text_embedding(query.strip())
-    raw_results = _vector_index.search(q_vec, top_k=100)
+    raw_results = _vector_index.search(q_vec, top_k=150)
 
     db = get_db()
     kf_cache: Dict[str, List[Any]] = {}
 
     candidates = []
+    seen_shots = set()
     rank = 1
     for r in raw_results:
         vid = r.get("video_id")
         if video_id and vid != video_id:
             continue
 
+        shot_id = r.get("shot_id")
+        # Deduplicate candidates by shot so the same shot does not repeat
+        if dedup and shot_id is not None:
+            shot_key = (vid, shot_id)
+            if shot_key in seen_shots:
+                continue
+            seen_shots.add(shot_key)
+
         if vid not in kf_cache:
             kf_cache[vid] = db.get_keyframes(vid)
 
-        # Resolve thumbnail image URL
+        # Resolve thumbnail image URL with fallback protection
         thumb_url = None
         if r.get("is_shot_pooled"):
             shot_id = r.get("shot_id")
@@ -271,8 +281,19 @@ def search_visual(
                 thumb_url = f"/api/keyframes/{vid}/{Path(center_kf.file_path).name}"
         else:
             file_path = r.get("file_path")
+            resolved = False
             if file_path:
-                thumb_url = f"/api/keyframes/{vid}/{Path(file_path).name}"
+                fp = Path(file_path)
+                if fp.exists() or (KEYFRAMES_DIR / vid / fp.name).exists():
+                    thumb_url = f"/api/keyframes/{vid}/{fp.name}"
+                    resolved = True
+            if not resolved:
+                # Fallback to current shot keyframe from database
+                shot_id = r.get("shot_id")
+                shot_kfs = [k for k in kf_cache[vid] if k.shot_id == shot_id]
+                center_kf = next((k for k in shot_kfs if k.is_shot_center), (shot_kfs[0] if shot_kfs else None))
+                if center_kf:
+                    thumb_url = f"/api/keyframes/{vid}/{Path(center_kf.file_path).name}"
 
         ts = float(r.get("timestamp_sec", 0.0))
         mins = int(ts // 60)
