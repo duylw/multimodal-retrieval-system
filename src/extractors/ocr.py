@@ -114,12 +114,27 @@ class OCRExtractor(BaseExtractor):
 
     @staticmethod
     def normalize_text(text: str) -> str:
-        """Cleans and standardizes extracted OCR text string."""
+        """
+        Cleans and standardizes extracted OCR text string.
+        Applies Vietnamese orthographic repair:
+        1. Corrects capital 'I' misrecognized as lowercase 'l' (e.g., TlÊU -> TIÊU, BlỂN -> BIỂN).
+        2. Corrects trailing 't' misrecognized as 'l' (e.g., biếl -> biết, nhiệl -> nhiệt, dợl -> đợt).
+        """
         if not text:
             return ""
         # Collapse multiple spaces and strip control characters
         cleaned = re.sub(r"[\r\n\t]+", " ", text)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        # 1. Capital words where 'l' (lowercase L) is surrounded by uppercase letters or at word boundary
+        cleaned = re.sub(r'([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ])l([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ])', r'\1I\2', cleaned)
+        cleaned = re.sub(r'([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ])l\b', r'\1I', cleaned)
+        cleaned = re.sub(r'\bl([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ])', r'I\1', cleaned)
+
+        # 2. Syllables ending in vowel + 'l' -> vowel + 't' (Vietnamese orthography forbids final 'l')
+        vowels = r'[aăâeêioôơuưyáắấéếíóốớúứýàằầèềìòồờùừỳảẳẩẻểỉỏổởủửỷãẵẫẽễĩõỗỡũữỹạặậẹệịọộợụựỵ]'
+        cleaned = re.sub(f'({vowels}+)l\\b', r'\1t', cleaned, flags=re.IGNORECASE)
+
         return cleaned
 
     def extract_keyframe(self, keyframe: KeyframeRecord) -> List[OCRRecord]:
