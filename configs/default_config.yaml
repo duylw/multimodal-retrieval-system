@@ -4,7 +4,6 @@
 paths:
   raw_videos_dir: "data/raw_videos"
   keyframes_dir: "data/keyframes"
-  audio_temp_dir: "data/audio_temp"
   indices_dir: "data/indices"
   metadata_db: "data/metadata.db"
   ground_truth_file: "data/ground_truth.json"
@@ -35,13 +34,6 @@ visual_model:
   batch_size: 16
   use_fp16: true
 
-speech_model:
-  whisper_model_size: "large-v3-turbo"
-  compute_type: "int8"
-  language: "vi"
-  vad_filter: true
-  min_speech_duration_ms: 250
-
 ocr_model:
   engine: "paddleocr"
   language: "vi"
@@ -56,6 +48,4 @@ retrieval:
   rrf_k: 60
   weights:
     visual: 1.0
-    speech: 1.2
     ocr: 1.5
-    audio: 0.8

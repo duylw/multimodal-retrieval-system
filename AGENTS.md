@@ -23,8 +23,8 @@ Before writing code or performing tasks, the AI assistant **must check in order 
 
 ## 3. Hardware Constraints
 * **Target Hardware:** NVIDIA GeForce GTX 1650 (4GB VRAM) | RAM: 16GB | Free Disk: ~150GB (D: drive).
-* **Sequential Staging Rule:** Never run two deep learning models simultaneously on the GPU. Offline pipeline stages must execute strictly sequentially: Shot Detection -> Keyframe Extraction -> SigLIP2 -> VRAM Release -> faster-whisper.
-* **Resource Cleanup:** Automatically remove temporary WAV audio files after ASR transcription. Intermediate data in `data/` must not exceed 30GB.
+* **Sequential Staging Rule:** Never run two deep learning models simultaneously on the GPU. Offline pipeline stages must execute strictly sequentially: Shot Detection -> Keyframe Extraction -> SigLIP2 -> VRAM Release -> PaddleOCR (on CPU).
+* **Resource Cleanup:** Intermediate data in `data/` must not exceed 30GB.
 
 ---
 

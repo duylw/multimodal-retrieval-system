@@ -17,8 +17,6 @@ data/raw_videos/*
 !data/raw_videos/.gitkeep
 data/keyframes/*
 !data/keyframes/.gitkeep
-data/audio_temp/*
-!data/audio_temp/.gitkeep
 data/indices/*
 !data/indices/.gitkeep
 data/features/*

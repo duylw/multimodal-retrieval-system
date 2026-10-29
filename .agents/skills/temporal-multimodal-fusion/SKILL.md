@@ -2,7 +2,7 @@
 name: temporal-multimodal-fusion
 description: >-
   Use this skill whenever implementing, debugging, or tuning multimodal query processing, score fusion,
-  or temporal alignment across Visual (SigLIP2), Speech (Whisper), and Text (PaddleOCR). Covers Reciprocal
+  or temporal alignment across Visual (SigLIP2) and On-Screen Text (PaddleOCR). Covers Reciprocal
   Rank Fusion (RRF), 5-second sliding windows, and temporal Non-Maximum Suppression (NMS).
 ---
 
@@ -17,19 +17,16 @@ This skill outlines the exact procedures for aligning heterogeneous search score
 Avoid slow LLM calls during query time. Parse natural language queries with rule-based patterns (< 1ms latency):
 
 * Branch OCR (On-screen text):
-  * Trigger: Substrings enclosed in quotes (e.g., '"Pho Hoa"') or terms like "chu", "bang hieu", "ti so", "gia".
+  * Trigger: Substrings enclosed in quotes (e.g., '"Pho Hoa"'), terms like "chu", "bang hieu", "ti so", "gia", "text", "signboard".
   * Action: Route extracted term directly to SQLite FTS5 table `ocr_fts`.
-* Branch ASR (Speech dialogue):
-  * Trigger: Prefixes like "noi ve", "giai thich", "phong van", "doc tin".
-  * Action: Extract dialogue topic and route to BM25 and dense `bge-m3` search.
 * Branch Visual (SigLIP2):
-  * Action: Translate Vietnamese query to English via local lightweight translator and encode with SigLIP2.
+  * Action: Translate Vietnamese query to English via local lightweight translator and encode with SigLIP2 text encoder to search FAISS visual index.
 
 ---
 
 ## 2. Score Normalization via Reciprocal Rank Fusion (RRF)
 
-Never add raw similarity scores directly. Cosine similarity ranges in [0.0, 0.4], while BM25/FTS5 ranges in [0.0, 30.0+].
+Never add raw similarity scores directly. Cosine similarity ranges in [0.0, 0.4], while SQLite FTS5 / BM25 lexical scores range in [0.0, 30.0+].
 
 ### RRF Formula
 For each modality candidate list (Top 100 per channel):
@@ -39,9 +36,7 @@ RRF_score = modality_weight / (60 + rank)
 
 Default Weights:
 * Visual weight: 1.0
-* Speech (ASR) weight: 1.2
-* OCR weight: 1.5 (exact text match has high signal precision)
-* Audio (CLAP) weight: 0.8
+* OCR weight: 1.5 (exact on-screen text match has high signal precision)
 
 ---
 
@@ -54,8 +49,8 @@ To eliminate boundary cut effects where an event spanning second 4 to 7 gets div
    * Window Stride (Step): 2.5 seconds (50% overlap)
 2. Mapping Strategy:
    * Each keyframe timestamp `t` deposits its score into all windows overlapping with `t`.
-   * Each speech segment `[start, end]` deposits its score into all windows between `start` and `end`.
-   * Score aggregation: Sum normalized RRF scores within each window. Windows with consensus across multiple modalities accumulate the highest totals.
+   * Each OCR text timestamp `t` deposits its score into all windows overlapping with `t`.
+   * Score aggregation: Sum normalized RRF scores within each window. Windows with consensus across both visual and text modalities accumulate the highest totals.
 
 ---
 

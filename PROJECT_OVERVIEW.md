@@ -3,10 +3,11 @@
 ## 1. Problem Formulation
 The system addresses the problem of **Natural Language Video Moment Retrieval (NLVR)**:
 * **Input:**
-  * Offline Video Repository: Approximately 100GB of video (equivalent to 40-50 hours) covering diverse topics: news, documentaries, cooking, lifestyle, vlogs, etc.
-  * Online User Query: A natural language description (e.g., *"how to marinate beef before stir-frying"*, *"news anchor interviewing residents at fire scene"*, *"ambulance rushing through intersection with siren"*).
+  * Offline Video Repository: 726 broadcast and real-world video files (~116 GB, approximately 70-80 hours) from the HCMAI24 dataset (batches `L01` through `L24`), covering diverse topics: news, documentaries, cooking, lifestyle, traffic, interviews, and public safety.
+  * Online User Query: Natural language query (scene descriptions, visual actions, or on-screen signage/captions in Vietnamese or English).
+  * *Operational Constraint:* Audio and speech channels (ASR / CLAP) are explicitly excluded as competition and evaluation environments operate without audio listening equipment or headphones. The system relies strictly on **Visual (SigLIP2)** and **On-Screen Text (PaddleOCR)** modalities.
 * **Output:**
-  * A ranked list of candidate moments: **Video ID + Start Time (seconds) + End Time (seconds) + Confidence Score**.
+  * A ranked list of candidate moments: **Video ID + Shot ID + Start Time (seconds) + End Time (seconds) + Confidence Score**.
   * Interactive playback enabling users to seek directly to matching moments and explore surrounding context.
 
 ---
@@ -19,57 +20,50 @@ To support academic thesis requirements, the system evaluates against a Ground T
    * Timestamp T falls within the true boundary: `[Start_true - 5s, End_true + 5s]`.
    * Or the temporal Intersection over Union (IoU) between predicted segment and ground truth segment is >= 0.3.
 4. **Ablation Study Matrix:**
-   * Visual Only (SigLIP2)
-   * Visual + ASR (Whisper)
-   * Visual + OCR (PaddleOCR)
-   * Full Multimodal Fusion (Visual + ASR + OCR + CLAP)
+   * Visual Only (SigLIP2 Keyframe Embeddings)
+   * Text Only (PaddleOCR On-Screen Text with SQLite FTS5 / BM25)
+   * Multimodal Fusion (Visual SigLIP2 + On-Screen Text PaddleOCR via RRF)
 
 ---
 
 ## 3. Multimodal System Architecture
 
-Pipeline flow represented in ASCII:
+The pipeline uses a **Two-Tier Storage Architecture** that decouples deep learning feature extraction (per-video compressed caching) from atomic index building:
 
 ```
-OFFLINE PHASE (DATA INGESTION & MULTI-INDEXING)
-[Raw Video Files]
+OFFLINE PHASE (DATA INGESTION, FEATURE CACHING & DECOUPLED INDEXING)
+[Raw Video Files (726 videos)]
         │
-        ├─► [Video Decoder] ──► [SceneDetect / TransNetV2] ──► [Adaptive Keyframe Extractor]
-        │                                                              │
-        │                                                              ▼
-        │                                                 [SigLIP2 Image Embedding]
-        │                                                 + [Shot-level Mean Pooling]
-        │                                                              │
-        │                                                              ▼
-        │                                                 [FAISS Index: Visual]
-        │
-        ├─► [Audio Extractor (16kHz WAV)] ──► [Silero VAD] ──► [faster-whisper int8]
-        │                                                              │
-        │                                                              ▼
-        │                                                 [Transcripts with Timestamps]
-        │                                                              │
-        │                                          ┌───────────────────┴───────────────────┐
-        │                                          ▼                                       ▼
-        │                                 [BM25 Lexical Index]                    [bge-m3 Dense Index]
-        │
-        ├─► [Keyframes with Text] ──► [PaddleOCR (Vietnamese)]
-        │                                          │
-        │                                          ▼
-        │                             [SQLite FTS5 Full-text Search]
-        │
-        └─► [Audio 10s Chunks] ──► [CLAP Audio Event Embedding] ──► [FAISS Index: Audio]
+        ├─► [Video Decoder] ──► [Adaptive Shot Detector] ──► [Adaptive Keyframe Extractor]
+        │                                                           │
+        │                                                           ├─► [SigLIP2-Base (768-dim, DataLoader)]
+        │                                                           │   (Pure Keyframe Embeddings: 1 KF = 1 Vector)
+        │                                                           │   │
+        │                                                           │   ▼
+        │                                                           │   [Per-Video Feature Cache: .npz]
+        │                                                           │   │
+        │                                                           │   ▼ (Decoupled Index Builder)
+        │                                                           │   [FAISS Index: Visual (IndexFlatIP)]
+        │                                                           │
+        │                                                           ▼
+        └─► [Text-rich Keyframes] ──► [PaddleOCR (Vietnamese, CPU)]
+                                                    │
+                                                    ▼
+                                       [Per-Video Text Metadata]
+                                                    │
+                                                    ▼
+                                       [SQLite FTS5 Full-Text Search Index]
 
 
 ONLINE PHASE (QUERY UNDERSTANDING & TEMPORAL FUSION)
-[User Query]
+[User Query (Text / Visual Description)]
         │
         ▼
 [Query Parser & Router] ── (Rule-based Regex + Translation Fallback)
         │
         ├─► [Visual Description (EN)] ──► FAISS SigLIP2 Search (Top 200)
-        ├─► [Spoken Keywords]          ──► BM25 + bge-m3 ASR Search (Top 200)
-        ├─► [On-screen Text / Signage] ──► SQLite FTS5 OCR Search (Top 200)
-        └─► [Ambient Sounds]           ──► FAISS CLAP Search (Top 200)
+        │
+        └─► [On-screen Text / Signage] ──► SQLite FTS5 OCR Search (Top 200)
         │
         ▼
 [Score Normalization: Min-Max / Reciprocal Rank Fusion (RRF)]
@@ -88,80 +82,103 @@ ONLINE PHASE (QUERY UNDERSTANDING & TEMPORAL FUSION)
 
 ## 4. Codebase Directory Layout
 
+The repository enforces a **4-Layer Modular Architecture** with strict engine-runner decoupling, atomic checkpointing in SQLite, and centralized model cache management:
+
 ```
 d:/UIT/TX/doan/
 │
 ├── AGENTS.md                  # Assistant persona, operating rules, hardware constraints
 ├── PROJECT_OVERVIEW.md        # High-level architecture and system blueprint (this file)
-├── TRACKING.md                # Task tracking board and project roadmap
+├── TRACKING.md                # Task tracking board, activity logs, and milestone progress
+├── pyproject.toml             # Project dependencies and configuration (managed by uv)
+├── .python-version            # Python runtime version (3.12)
 │
-├── .agents/                   # Assistant capabilities and specialized runbooks
-│   └── skills/                # Progressive disclosure engineering skills
-│       ├── video-benchmark-eval/
-│       ├── vram-safe-embedding/
-│       ├── temporal-multimodal-fusion/
-│       └── feature-documentation-guide/
+├── .agents/                   # Specialized engineering skills
+│   └── skills/
+│       ├── fault-tolerant-checkpointing/  # Pre-flight guards, atomic rollbacks, idempotency
+│       ├── modular-code-architecture/     # 4-layer architecture, engine-runner separation
+│       ├── video-benchmark-eval/          # Ground truth benchmarks, Recall@K, MRR, IoU
+│       ├── vram-safe-embedding/           # GTX 1650 4GB VRAM safety, sequential staging
+│       ├── temporal-multimodal-fusion/    # RRF fusion, sliding windows, temporal NMS
+│       └── feature-documentation-guide/   # Standardized CLI usage documentation
 │
-├── docs/                      # Technical documentation and team guidelines
+├── docs/                      # Technical documentation and guides
 │   ├── GLOSSARY.md            # Technical dictionary and AI model mechanics
-│   ├── GIT_GUIDELINES.md      # Git workflow, conventional commits, and branching
-│   └── guides/                # Step-by-step user and CLI feature guides
+│   ├── GIT_GUIDELINES.md      # Conventional commits and Git branching standards
+│   └── guides/                # Practical CLI and feature user guides
+│       ├── shot-detection-and-keyframes.md
+│       ├── shot-keyframe-inspector.md
+│       ├── visual-siglip-faiss.md
+│       └── debug-ui-guide.md
 │
-├── tasks/                     # Task specifications and implementation plans
+├── tasks/                     # Task specifications and implementation roadmaps
 │   ├── task-00-environment-and-eval.md
 │   ├── task-01-shot-detection-keyframes.md
 │   ├── task-01b-debug-ui-shots-keyframes.md
 │   ├── task-02-visual-siglip-faiss.md
-│   ├── task-03-asr-whisper.md
+│   ├── task-02b-fault-tolerance-and-modular-refactoring.md
+│   ├── task-02c-visual-performance-dataloader.md
 │   ├── task-04-ocr-paddle.md
 │   ├── task-05-temporal-fusion.md
-│   ├── task-06-ui-and-feedback.md
-│   └── task-07-audio-clap.md
+│   └── task-06-ui-and-feedback.md
 │
 ├── configs/                   # System configuration files
 │   └── default_config.yaml    # Storage paths, shot thresholds, model IDs, batch sizes
 │
-├── src/                       # Core system source code
+├── models/                    # Centralized Hugging Face model cache (on D: drive to protect C:)
+│
+├── src/                       # Core system source code (4-layer modular hierarchy)
 │   ├── __init__.py
-│   ├── pipeline.py            # Orchestrator for end-to-end offline pipeline with resume
 │   │
-│   ├── extractors/            # Feature extraction modules
+│   ├── common/                # Layer 1: Foundation (interfaces, config, data schemas)
 │   │   ├── __init__.py
-│   │   ├── shots.py           # Shot boundary detection (PySceneDetect / TransNetV2)
-│   │   ├── keyframes.py       # Adaptive time-interval keyframe extraction and filters
-│   │   ├── visual.py          # SigLIP2 visual embeddings
-│   │   ├── speech.py          # Silero VAD + faster-whisper transcription
-│   │   ├── ocr.py             # Keyframe text detection + PaddleOCR
-│   │   └── audio_events.py    # CLAP audio event embeddings
+│   │   ├── base.py            # BaseExtractor abstract base class
+│   │   ├── config.py          # ConfigManager YAML loader
+│   │   └── types.py           # Dataclasses (VideoRecord, ShotRecord, KeyframeRecord)
 │   │
-│   ├── indexers/              # Database and index managers
+│   ├── extractors/            # Layer 2 (Core Engines) & Layer 3 (CLI Runners)
 │   │   ├── __init__.py
-│   │   ├── vector_index.py    # FAISS indices for visual and audio embeddings
-│   │   ├── text_index.py      # SQLite FTS5 and BM25 indexers
-│   │   └── metadata_db.py     # SQLite manager for videos, shots, keyframes, checkpoints
+│   │   ├── shots.py           # Engine: Adaptive shot boundary detection
+│   │   ├── run_shots.py       # Runner: CLI for shot detection with checkpoint guards
+│   │   ├── keyframes.py       # Engine: Adaptive keyframe extraction & blur filter
+│   │   ├── run_keyframes.py   # Runner: CLI for keyframe extraction with rollback
+│   │   ├── visual.py          # Engine: SigLIP2-Base pure keyframe embedding & DataLoader
+│   │   ├── run_visual.py      # Runner: CLI for visual feature extraction to .npz caches
+│   │   ├── ocr.py             # Engine: PaddleOCR text extraction from keyframes (on CPU)
+│   │   └── run_ocr.py         # Runner: CLI for OCR extraction to SQLite FTS5
 │   │
-│   ├── retrieval/             # Query routing and multimodal fusion
+│   ├── indexers/              # Database management & search index construction
 │   │   ├── __init__.py
-│   │   ├── query_parser.py    # Intent parsing and query translation
-│   │   ├── score_fusion.py    # RRF score normalization and 5s sliding window
-│   │   └── search_engine.py   # Unified search orchestrator
+│   │   ├── metadata_db.py     # SQLite manager for videos, shots, keyframes, checkpoints
+│   │   ├── vector_index.py    # FAISS IndexFlatIP manager for visual embeddings
+│   │   ├── text_index.py      # SQLite FTS5 text indexer for OCR scene text
+│   │   └── build_indices.py   # Standalone CLI tool to aggregate .npz caches into FAISS
+│   │
+│   ├── retrieval/             # Layer 4: Query processing & multimodal score fusion
+│   │   ├── __init__.py
+│   │   ├── query_parser.py    # Intent parsing and translation fallback
+│   │   ├── score_fusion.py    # Reciprocal Rank Fusion (RRF) & 5s sliding window
+│   │   └── search_engine.py   # Unified multimodal search orchestrator
 │   │
 │   ├── evaluation/            # Scientific benchmark harness
 │   │   ├── __init__.py
 │   │   ├── ground_truth.json  # Benchmark queries with ground truth timestamps
-│   │   └── evaluate.py        # Evaluates Recall@K, MRR, IoU, and ablation tables
+│   │   └── evaluate.py        # Recall@K, MRR, IoU calculation & ablation reporter
 │   │
-│   └── ui/                    # Search interface and debug tools
-│       ├── debug_server.py    # FastAPI server for shot and keyframe inspection
-│       ├── app.py             # Primary search FastAPI application
-│       └── static/            # Frontend SPA assets (HTML/CSS/JS)
+│   └── ui/                    # User interface & developer inspection services
+│       ├── __init__.py
+│       ├── debug_server.py    # FastAPI server (HTTP 206 video stream, visual search, monitor)
+│       ├── app.py             # Production search web application
+│       └── static/            # Frontend SPA assets (HTML5, modern CSS, vanilla JS)
+│           ├── index.html
+│           ├── style.css
+│           └── app.js
 │
-├── data/                      # Local data directory (excluded in .gitignore)
-│   ├── raw_videos/            # Input video files
-│   ├── keyframes/             # Extracted keyframe images
-│   ├── audio_temp/            # Temporary audio files (auto-cleaned after ASR)
-│   ├── indices/               # FAISS (.index) and SQLite (.db) storage
-│   └── checkpoints/           # Execution state tracking
-├── pyproject.toml             # Project dependencies and configuration (uv)
-└── .python-version            # Python runtime version
+└── data/                      # Local data artifacts (ignored in Git)
+    ├── raw_videos/            # 726 raw MP4 files (batches L01 - L24, ~116 GB)
+    ├── keyframes/             # Extracted JPEG keyframes organized by video ID
+    ├── features/              # Per-video compressed numpy feature caches (.npz)
+    │   └── visual/            # Dense SigLIP2 keyframe embeddings per video
+    ├── indices/               # Unified FAISS indices (.index) and metadata mappings (.json)
+    └── metadata.db            # SQLite relational database (videos, shots, keyframes, checkpoints)
 ```
