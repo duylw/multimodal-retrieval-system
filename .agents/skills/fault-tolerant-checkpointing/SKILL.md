@@ -49,7 +49,7 @@ Every stage must validate its explicit predecessor before beginning work:
    └── Artifacts:  JPEG files in `data/keyframes/{video_id}/`, SQLite `keyframes` table
    │
    ├───────────────────────────────┬───────────────────────────────┐
-   ▼ Stage 3A: Visual SigLIP2      ▼ Stage 3B: Whisper ASR         ▼ Stage 3C: PaddleOCR
+   ▼ Stage 3A: Visual SigLIP2      ▼ Stage 3B: Whisper ASR         ▼ Stage 3C: EasyOCR
    ├── Pre-flight: Keyframes exist ├── Pre-flight: Raw video exists├── Pre-flight: Keyframes exist
    └── Artifacts:                  └── Artifacts:                  └── Artifacts:
        `data/features/visual/`         SQLite `transcripts` table      SQLite `ocr_texts` table
@@ -164,7 +164,7 @@ def run_stage_on_directory(stage_name: str, video_dir: Path, force: bool = False
 ### B. Zero-Modality Fallback (Silent Audio or Textless Frames)
 * Video with no speech: Whisper returns 0 segments.
   * Correct Behavior: Do NOT fail. Record `COMPLETED` with `artifact_count = 0`.
-* Video with no text: PaddleOCR returns 0 text lines.
+* Video with no text: EasyOCR returns 0 text lines.
   * Correct Behavior: Do NOT fail. Record `COMPLETED` with `artifact_count = 0`.
 
 ### C. CUDA Out-Of-Memory (OOM) Recovery

@@ -1,7 +1,7 @@
 """
-Standalone CLI runner for On-Screen Text Extraction with PaddleOCR (Stage 4).
+Standalone CLI runner for On-Screen Text Extraction with EasyOCR (Stage 4).
 Screens keyframe images using morphological edge-density filtering, executes
-Vietnamese PaddleOCR recognition purely on CPU, persists detections into SQLite
+Vietnamese EasyOCR recognition purely on CPU, persists detections into SQLite
 relational and FTS5 full-text tables, and manages fault tolerance.
 """
 
@@ -25,7 +25,7 @@ if sys.platform == "win32":
 def parse_args() -> argparse.Namespace:
     """Parses command-line arguments for OCR runner."""
     parser = argparse.ArgumentParser(
-        description="Stage 4 Runner: On-Screen Text Extraction via PaddleOCR & SQLite FTS5 Indexing."
+        description="Stage 4 Runner: On-Screen Text Extraction via EasyOCR & SQLite FTS5 Indexing."
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-filter",
         action="store_true",
-        help="Disable edge-density pre-filter and run PaddleOCR on every keyframe."
+        help="Disable edge-density pre-filter and run EasyOCR on every keyframe."
     )
     return parser.parse_args()
 

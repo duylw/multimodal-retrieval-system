@@ -1,7 +1,7 @@
 # Task 05: Temporal Multimodal Fusion & Query Routing
 
 ## 1. Objectives (What)
-* Develop a lightweight, rule-based **Query Parser & Router** to decompose user natural language queries into modality-specific retrieval paths (Visual SigLIP2 and On-Screen Text PaddleOCR).
+* Develop a lightweight, rule-based **Query Parser & Router** to decompose user natural language queries into modality-specific retrieval paths (Visual SigLIP2 and On-Screen Text EasyOCR).
 * Resolve the **Score Incompatibility Problem** across disparate scales (SigLIP2 Cosine Similarity [0, 0.4] vs SQLite FTS5 / BM25 Lexical Scores [0, 30]).
 * Implement a **5-Second Temporal Sliding Window** with 2.5-second stride (50% overlap) to eliminate boundary fragmentation across time.
 * Apply **Temporal Non-Maximum Suppression (NMS)** to merge overlapping candidate windows into coherent, continuous video moments.

@@ -5,7 +5,7 @@ The system addresses the problem of **Natural Language Video Moment Retrieval (N
 * **Input:**
   * Offline Video Repository: 726 broadcast and real-world video files (~116 GB, approximately 70-80 hours) from the HCMAI24 dataset (batches `L01` through `L24`), covering diverse topics: news, documentaries, cooking, lifestyle, traffic, interviews, and public safety.
   * Online User Query: Natural language query (scene descriptions, visual actions, or on-screen signage/captions in Vietnamese or English).
-  * *Operational Constraint:* Audio and speech channels (ASR / CLAP) are explicitly excluded as competition and evaluation environments operate without audio listening equipment or headphones. The system relies strictly on **Visual (SigLIP2)** and **On-Screen Text (PaddleOCR)** modalities.
+  * *Operational Constraint:* Audio and speech channels (ASR / CLAP) are explicitly excluded as competition and evaluation environments operate without audio listening equipment or headphones. The system relies strictly on **Visual (SigLIP2)** and **On-Screen Text (EasyOCR)** modalities.
 * **Output:**
   * A ranked list of candidate moments: **Video ID + Shot ID + Start Time (seconds) + End Time (seconds) + Confidence Score**.
   * Interactive playback enabling users to seek directly to matching moments and explore surrounding context.
@@ -21,8 +21,8 @@ To support academic thesis requirements, the system evaluates against a Ground T
    * Or the temporal Intersection over Union (IoU) between predicted segment and ground truth segment is >= 0.3.
 4. **Ablation Study Matrix:**
    * Visual Only (SigLIP2 Keyframe Embeddings)
-   * Text Only (PaddleOCR On-Screen Text with SQLite FTS5 / BM25)
-   * Multimodal Fusion (Visual SigLIP2 + On-Screen Text PaddleOCR via RRF)
+   * Text Only (EasyOCR On-Screen Text with SQLite FTS5 / BM25)
+   * Multimodal Fusion (Visual SigLIP2 + On-Screen Text EasyOCR via RRF)
 
 ---
 
@@ -46,7 +46,7 @@ OFFLINE PHASE (DATA INGESTION, FEATURE CACHING & DECOUPLED INDEXING)
         │                                                           │   [FAISS Index: Visual (IndexFlatIP)]
         │                                                           │
         │                                                           ▼
-        └─► [Text-rich Keyframes] ──► [PaddleOCR (Vietnamese, CPU)]
+        └─► [Text-rich Keyframes] ──► [EasyOCR (Vietnamese, CPU)]
                                                     │
                                                     ▼
                                        [Per-Video Text Metadata]
@@ -118,7 +118,7 @@ d:/UIT/TX/doan/
 │   ├── task-02-visual-siglip-faiss.md
 │   ├── task-02b-fault-tolerance-and-modular-refactoring.md
 │   ├── task-02c-visual-performance-dataloader.md
-│   ├── task-04-ocr-paddle.md
+│   ├── task-04-ocr-easyocr.md
 │   ├── task-05-temporal-fusion.md
 │   └── task-06-ui-and-feedback.md
 │
@@ -144,7 +144,7 @@ d:/UIT/TX/doan/
 │   │   ├── run_keyframes.py   # Runner: CLI for keyframe extraction with rollback
 │   │   ├── visual.py          # Engine: SigLIP2-Base pure keyframe embedding & DataLoader
 │   │   ├── run_visual.py      # Runner: CLI for visual feature extraction to .npz caches
-│   │   ├── ocr.py             # Engine: PaddleOCR text extraction from keyframes (on CPU)
+│   │   ├── ocr.py             # Engine: EasyOCR text extraction from keyframes (on CPU)
 │   │   └── run_ocr.py         # Runner: CLI for OCR extraction to SQLite FTS5
 │   │
 │   ├── indexers/              # Database management & search index construction

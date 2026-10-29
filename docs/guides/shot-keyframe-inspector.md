@@ -69,7 +69,7 @@ The interface consists of three primary views accessible via the top navigation 
   * `keyframes`: Keyframe extraction status.
   * `visual`: SigLIP2 dense feature caching status.
   * `speech`: Whisper transcription status.
-  * `ocr`: PaddleOCR text extraction status.
+  * `ocr`: EasyOCR text extraction status.
 * **Stage Badges:** Color-coded badges:
   * `[COMPLETED]` (Green): Stage finished successfully, displays artifact count.
   * `[PENDING]` (Gray): Stage has not been run yet.

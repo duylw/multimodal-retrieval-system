@@ -71,5 +71,5 @@ Every proposed module must be validated through an ablation study. Output result
 |---|---|---|---|---|---|---|
 | Baseline | Visual (SigLIP2) only | 0.22 | 0.38 | 0.45 | 0.31 | 0.08s |
 | + Speech | Visual + ASR Whisper | 0.35 | 0.58 | 0.68 | 0.44 | 0.12s |
-| + OCR | Visual + ASR + PaddleOCR | 0.48 | 0.72 | 0.82 | 0.56 | 0.15s |
+| + OCR | Visual + ASR + EasyOCR | 0.48 | 0.72 | 0.82 | 0.56 | 0.15s |
 | Full Pipeline | Visual + ASR + OCR + CLAP | 0.52 | 0.78 | 0.88 | 0.61 | 0.18s |

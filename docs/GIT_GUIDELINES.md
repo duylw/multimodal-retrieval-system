@@ -36,7 +36,7 @@ main (Production-ready, stable, passing evaluation harness)
  ├── feat/task-01b-debug-ui (Interactive debug inspector)
  ├── feat/task-02-visual (SigLIP2 embedding & FAISS indexing)
  ├── feat/task-03-speech (Whisper ASR transcription)
- ├── feat/task-04-ocr (PaddleOCR text extraction)
+ ├── feat/task-04-ocr (EasyOCR text extraction)
  ├── feat/task-05-fusion (Temporal fusion & sliding window)
  └── fix/vram-leak-siglip (Bug fixes & optimizations)
 ```
@@ -72,7 +72,7 @@ All commit messages must be written in English adhering to the standard format:
 * `keyframes`: Keyframe extraction, blur filtering, deduplication.
 * `visual`: SigLIP2 embeddings and visual indexing.
 * `speech`: Whisper transcription and ASR processing.
-* `ocr`: PaddleOCR detection and SQLite FTS5 search.
+* `ocr`: EasyOCR detection and SQLite FTS5 search.
 * `fusion`: Temporal alignment, RRF score fusion, sliding window.
 * `ui`: Web application, streaming server, player timeline.
 * `eval`: Scientific evaluation, Recall@K, MRR, ground truth.

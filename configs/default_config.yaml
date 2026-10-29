@@ -35,10 +35,11 @@ visual_model:
   use_fp16: true
 
 ocr_model:
-  engine: "paddleocr"
+  engine: "easyocr"
   language: "vi"
   use_gpu: false
-  min_confidence: 0.65
+  model_dir: "models/easyocr"
+  min_confidence: 0.60
   edge_density_threshold: 0.08
 
 retrieval:

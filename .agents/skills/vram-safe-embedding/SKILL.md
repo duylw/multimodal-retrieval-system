@@ -35,7 +35,7 @@ Stage 3: Speech-to-Text Transcription (GPU: faster-whisper)
    --> Action: Delete temporary WAV file immediately and release GPU memory.
 
 Stage 4: Text & OCR Processing (CPU Multiprocessing)
-   --> Run PaddleOCR and text embedding (bge-m3) on CPU.
+   --> Run EasyOCR and text embedding (bge-m3) on CPU.
 ```
 
 ---

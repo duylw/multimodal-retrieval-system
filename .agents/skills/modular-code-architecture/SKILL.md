@@ -55,7 +55,7 @@ To maintain clean code and prevent tight coupling, every Python module in `src/`
   * Configuration loader (`ConfigManager`).
   * Custom exceptions (`SystemConfigError`, `PrerequisiteNotMetError`).
 * **Strict Prohibitions:**
-  * Never import heavy machine learning frameworks (`torch`, `transformers`, `cv2`, `faster_whisper`, `paddleocr`) in Layer 1.
+  * Never import heavy machine learning frameworks (`torch`, `transformers`, `cv2`, `faster_whisper`, `easyocr`) in Layer 1.
   * Must have zero dependencies on higher layers.
 
 ### Layer 2: Core Processing Engines (`src/extractors/`, `src/indexers/`, `src/fusion/`)

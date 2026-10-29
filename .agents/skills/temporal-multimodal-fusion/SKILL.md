@@ -2,7 +2,7 @@
 name: temporal-multimodal-fusion
 description: >-
   Use this skill whenever implementing, debugging, or tuning multimodal query processing, score fusion,
-  or temporal alignment across Visual (SigLIP2) and On-Screen Text (PaddleOCR). Covers Reciprocal
+  or temporal alignment across Visual (SigLIP2) and On-Screen Text (EasyOCR). Covers Reciprocal
   Rank Fusion (RRF), 5-second sliding windows, and temporal Non-Maximum Suppression (NMS).
 ---
 

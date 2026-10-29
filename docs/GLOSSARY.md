@@ -55,12 +55,12 @@ This document provides in-depth explanations of the core technical concepts, alg
   * Ultra-lightweight speech presence classifier separating human voice from silence, wind, or ambient noise.
   * Prevents Whisper hallucinations on non-speech audio segments where silent chunks often prompt spurious repetitive phrases.
 
-### 2.4. PaddleOCR (On-Screen Text Channel)
+### 2.4. EasyOCR (On-Screen Text Channel)
 * **Objective:** Detects and transcribes on-screen text (news tickers, signboards, presentation slides, titles) supporting full Vietnamese diacritics.
 * **Two-Stage Pipeline:**
-  1. *Text Detection (DBNet):* Locates text regions and produces bounding polygons.
-  2. *Text Recognition (SVTR / CRNN):* Crops bounding regions and decodes character sequences.
-* **CPU Multiprocessing:** Executed entirely on CPU with multi-core parallelism, reserving 100% of GPU VRAM for SigLIP2 and Whisper.
+  1. *Text Detection (CRAFT):* Locates text regions and produces bounding polygons.
+  2. *Text Recognition (CRNN):* Crops bounding regions and decodes Vietnamese character sequences.
+* **CPU Execution:** Executed entirely on CPU threads with centralized model weights in `models/easyocr/`, reserving 100% of GPU VRAM for SigLIP2 visual embeddings.
 
 ### 2.5. bge-m3 (Dense Text Embedding)
 * **Definition:** BAAI General Embedding Multi-lingual, Multi-functionality, Multi-granularity.

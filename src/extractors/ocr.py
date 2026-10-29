@@ -1,5 +1,5 @@
 """
-Core Engine: On-Screen Text Extraction with PaddleOCR on CPU (Stage 4).
+Core Engine: On-Screen Text Extraction with EasyOCR on CPU (Stage 4).
 Extracts Vietnamese and multilingual text from sharp keyframes, incorporates
 a morphological edge-density text presence pre-filter to skip non-text frames,
 and persists structured text detections for SQLite FTS5 full-text indexing.
@@ -12,14 +12,12 @@ import numpy as np
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
-
-# Prevent OpenMP / MKL DLL symbol conflict on Windows (WinError 127 in shm.dll)
 import torch
 
 try:
-    from paddleocr import PaddleOCR
+    import easyocr
 except ImportError:
-    PaddleOCR = None
+    easyocr = None
 
 from src.common.base import BaseExtractor
 from src.common.config import ConfigManager
@@ -29,7 +27,7 @@ from src.indexers.metadata_db import MetadataDB
 
 class OCRExtractor(BaseExtractor):
     """
-    Extracts text from keyframe images using PaddleOCR on CPU with morphological pre-filtering.
+    Extracts text from keyframe images using EasyOCR on CPU with morphological pre-filtering.
     """
 
     def __init__(
@@ -44,37 +42,41 @@ class OCRExtractor(BaseExtractor):
         ocr_cfg = self.config.get("ocr_model", {})
         self.lang: str = ocr_cfg.get("language", "vi")
         self.use_gpu: bool = bool(ocr_cfg.get("use_gpu", False))
-        self.min_confidence: float = float(ocr_cfg.get("min_confidence", 0.65))
+        self.model_dir: str = str(Path(ocr_cfg.get("model_dir", "models/easyocr")).resolve())
+        self.min_confidence: float = float(ocr_cfg.get("min_confidence", 0.60))
         self.edge_density_threshold: float = float(ocr_cfg.get("edge_density_threshold", 0.08))
         self.use_prefilter: bool = True
 
         db_file = db_path or self.config.get("paths", {}).get("metadata_db", "data/metadata.db")
         self.db = MetadataDB(db_file)
-        self.ocr_engine: Optional[PaddleOCR] = None
+        self.ocr_engine: Optional[Any] = None
 
     def load_model(self) -> None:
-        """Initializes PaddleOCR engine lazily."""
+        """Initializes EasyOCR engine lazily."""
         if self.ocr_engine is None:
-            if PaddleOCR is None:
-                raise ImportError("PaddleOCR is not installed. Please run: uv add paddleocr paddlepaddle==2.6.2")
+            if easyocr is None:
+                raise ImportError("EasyOCR is not installed. Please run: uv add easyocr")
 
+            os.makedirs(self.model_dir, exist_ok=True)
             logger.info(
-                f"[INFO] Initializing PaddleOCR (lang='{self.lang}', use_gpu={self.use_gpu}, min_confidence={self.min_confidence})..."
+                f"[INFO] Initializing EasyOCR (lang=['{self.lang}'], use_gpu={self.use_gpu}, "
+                f"model_dir='{self.model_dir}', min_confidence={self.min_confidence})..."
             )
             # Use CPU to preserve GPU VRAM for visual models
-            self.ocr_engine = PaddleOCR(
-                use_angle_cls=True,
-                lang=self.lang,
-                use_gpu=self.use_gpu,
-                show_log=False
+            self.ocr_engine = easyocr.Reader(
+                lang_list=[self.lang],
+                gpu=self.use_gpu,
+                model_storage_directory=self.model_dir,
+                download_enabled=True,
+                verbose=False
             )
-            logger.info("[OK] PaddleOCR engine initialized successfully on CPU.")
+            logger.info("[OK] EasyOCR engine initialized successfully.")
 
     def safe_unload(self) -> None:
         """Releases OCR engine resources."""
         if self.ocr_engine is not None:
             self.ocr_engine = None
-            logger.info("[OK] PaddleOCR engine unloaded.")
+            logger.info("[OK] EasyOCR engine unloaded.")
 
     def compute_edge_density(self, img_path: str) -> float:
         """
@@ -108,21 +110,13 @@ class OCRExtractor(BaseExtractor):
         # Collapse multiple spaces and strip control characters
         cleaned = re.sub(r"[\r\n\t]+", " ", text)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
-
-        # Repair common PaddleOCR Latin-v3 vowel confusions on Vietnamese text
-        # 'nuäc' or 'uäc' -> 'nước' / 'ước'
-        cleaned = re.sub(r"\bnuäc\b", "nước", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"uäc\b", "ước", cleaned, flags=re.IGNORECASE)
-        # 'vuat' preceded by 'lai' or followed by 'qua' -> 'vượt'
-        cleaned = re.sub(r"\bvuat\b", "vượt", cleaned, flags=re.IGNORECASE)
-
         return cleaned
 
     def extract_keyframe(self, keyframe: KeyframeRecord) -> List[OCRRecord]:
         """
         Runs text extraction pipeline on a single keyframe:
         1. Morphological edge density pre-filter.
-        2. PaddleOCR text detection + recognition.
+        2. EasyOCR text detection + Vietnamese recognition.
         3. Confidence filtering and text normalization.
         """
         img_path = keyframe.file_path
@@ -139,17 +133,18 @@ class OCRExtractor(BaseExtractor):
         # 2. Deep OCR Inference
         self.load_model()
         try:
-            results = self.ocr_engine.ocr(img_path, cls=True)
+            results = self.ocr_engine.readtext(img_path)
         except Exception as e:
-            logger.error(f"[ERROR] PaddleOCR inference error on {img_path}: {e}")
+            logger.error(f"[ERROR] EasyOCR inference error on {img_path}: {e}")
             return []
 
-        if not results or not results[0]:
+        if not results:
             return []
 
         ocr_records: List[OCRRecord] = []
-        for idx, line in enumerate(results[0]):
-            box, (raw_text, score) = line
+        for idx, item in enumerate(results):
+            # EasyOCR returns: (bbox, text, prob)
+            box, raw_text, score = item
             confidence = float(score)
 
             if confidence < self.min_confidence:
@@ -214,4 +209,3 @@ class OCRExtractor(BaseExtractor):
     def is_already_processed(self, video_id: str) -> bool:
         """Checks whether OCR stage has completed for this video."""
         return self.db.is_stage_completed(video_id, "ocr")
-
