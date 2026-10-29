@@ -1145,3 +1145,70 @@ body {
     color: #f87171;
 }
 
+/* Modality Toggle */
+.search-modality-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.modality-btn {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modality-btn:hover {
+    border-color: var(--accent);
+    color: var(--text-main);
+}
+
+.modality-btn.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Keyframe OCR Snippets */
+.kf-ocr-snippets {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 4px;
+    padding: 3px 6px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.kf-ocr-snippets .ocr-tag {
+    font-weight: 700;
+    color: #f59e0b;
+    font-size: 10px;
+    margin-right: 4px;
+}
+
+/* Candidate OCR Snippet */
+.candidate-text-snippet {
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: rgba(245, 158, 11, 0.1);
+    border-left: 3px solid #f59e0b;
+    border-radius: 0 4px 4px 0;
+    color: #fef08a;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+

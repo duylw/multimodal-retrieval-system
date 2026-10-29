@@ -3,12 +3,13 @@ SQLite database manager for video metadata, shot boundaries, keyframes, and pipe
 Handles persistence, retrieval, fault-tolerant state tracking, and atomic rollbacks.
 """
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from loguru import logger
 
-from src.common.types import ShotRecord, KeyframeRecord
+from src.common.types import ShotRecord, KeyframeRecord, OCRRecord
 
 
 class MetadataDB:
@@ -71,6 +72,34 @@ class MetadataDB:
                     is_shot_center INTEGER NOT NULL,
                     blur_score REAL DEFAULT 0.0,
                     FOREIGN KEY (video_id, shot_id) REFERENCES shots(video_id, shot_id) ON DELETE CASCADE
+                );
+            """)
+
+            # OCR text detection records table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ocr_records (
+                    ocr_id TEXT PRIMARY KEY,
+                    video_id TEXT NOT NULL,
+                    keyframe_id TEXT NOT NULL,
+                    timestamp_sec REAL NOT NULL,
+                    text_detected TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    bbox_json TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
+                    FOREIGN KEY (keyframe_id) REFERENCES keyframes(keyframe_id) ON DELETE CASCADE
+                );
+            """)
+
+            # SQLite FTS5 full-text search virtual table for on-screen text (with automatic diacritic folding)
+            conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS ocr_fts USING fts5(
+                    ocr_id UNINDEXED,
+                    video_id UNINDEXED,
+                    keyframe_id UNINDEXED,
+                    timestamp_sec UNINDEXED,
+                    text_detected,
+                    tokenize = 'unicode61 remove_diacritics 2'
                 );
             """)
 
@@ -301,12 +330,134 @@ class MetadataDB:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def save_ocr_records(self, records: List[OCRRecord]) -> None:
+        """Batch saves OCR detection records into SQLite relational and FTS5 tables."""
+        if not records:
+            return
+        with self._get_connection() as conn:
+            conn.executemany("""
+                INSERT INTO ocr_records (
+                    ocr_id, video_id, keyframe_id, timestamp_sec, text_detected, confidence, bbox_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ocr_id) DO UPDATE SET
+                    text_detected = excluded.text_detected,
+                    confidence = excluded.confidence,
+                    bbox_json = excluded.bbox_json;
+            """, [
+                (
+                    r.ocr_id,
+                    r.video_id,
+                    r.keyframe_id,
+                    r.timestamp_sec,
+                    r.text_detected,
+                    r.confidence,
+                    json.dumps(r.bbox) if r.bbox else None
+                )
+                for r in records
+            ])
+
+            conn.executemany("""
+                INSERT INTO ocr_fts (ocr_id, video_id, keyframe_id, timestamp_sec, text_detected)
+                VALUES (?, ?, ?, ?, ?);
+            """, [
+                (
+                    r.ocr_id,
+                    r.video_id,
+                    r.keyframe_id,
+                    r.timestamp_sec,
+                    r.text_detected.replace('đ', 'd').replace('Đ', 'D')
+                )
+                for r in records
+            ])
+            conn.commit()
+
+    def delete_ocr_records(self, video_id: str) -> None:
+        """Deletes all OCR records for a video from both relational and FTS5 tables."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM ocr_records WHERE video_id = ?;", (video_id,))
+            conn.execute("DELETE FROM ocr_fts WHERE video_id = ?;", (video_id,))
+            conn.commit()
+
+    def get_ocr_records(self, video_id: str) -> List[OCRRecord]:
+        """Retrieves all OCR records for a given video sorted by timestamp."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM ocr_records WHERE video_id = ? ORDER BY timestamp_sec ASC;",
+                (video_id,)
+            )
+            rows = cursor.fetchall()
+            return [
+                OCRRecord(
+                    ocr_id=r["ocr_id"],
+                    video_id=r["video_id"],
+                    keyframe_id=r["keyframe_id"],
+                    timestamp_sec=r["timestamp_sec"],
+                    text_detected=r["text_detected"],
+                    bbox=json.loads(r["bbox_json"]) if r["bbox_json"] else [],
+                    confidence=r["confidence"]
+                )
+                for r in rows
+            ]
+
+    def search_ocr(self, query: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Executes full-text keyword search across detected on-screen text using SQLite FTS5.
+        Normalizes Vietnamese 'd-stroke' (đ/Đ -> d/D) so queries match unaccented Latin OCR output.
+        Returns matches ordered by BM25 relevance score.
+        """
+        # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
+        clean_query = query.strip().replace('"', '""').replace('đ', 'd').replace('Đ', 'D')
+        if not clean_query:
+            return []
+
+        terms = [t for t in clean_query.split() if t]
+        if not terms:
+            return []
+
+        fts_query = " ".join([f'"{t}"*' for t in terms])
+
+        with self._get_connection() as conn:
+            try:
+                cursor = conn.execute("""
+                    SELECT 
+                        ocr_id,
+                        video_id,
+                        keyframe_id,
+                        timestamp_sec,
+                        text_detected,
+                        -bm25(ocr_fts) AS bm25_score
+                    FROM ocr_fts
+                    WHERE ocr_fts MATCH ?
+                    ORDER BY bm25_score DESC
+                    LIMIT ?;
+                """, (fts_query, limit))
+                rows = cursor.fetchall()
+                return [dict(r) for r in rows]
+            except sqlite3.OperationalError:
+                cursor = conn.execute("""
+                    SELECT 
+                        ocr_id,
+                        video_id,
+                        keyframe_id,
+                        timestamp_sec,
+                        text_detected,
+                        -bm25(ocr_fts) AS bm25_score
+                    FROM ocr_fts
+                    WHERE ocr_fts MATCH ?
+                    ORDER BY bm25_score DESC
+                    LIMIT ?;
+                """, (f'"{clean_query}"', limit))
+                rows = cursor.fetchall()
+                return [dict(r) for r in rows]
+
     def get_database_summary(self) -> Dict[str, Any]:
         """Returns aggregate row counts and checkpoint breakdown across all tables."""
         with self._get_connection() as conn:
             video_cnt = conn.execute("SELECT COUNT(*) FROM videos;").fetchone()[0]
             shot_cnt = conn.execute("SELECT COUNT(*) FROM shots;").fetchone()[0]
             kf_cnt = conn.execute("SELECT COUNT(*) FROM keyframes;").fetchone()[0]
+            ocr_cnt = conn.execute("SELECT COUNT(*) FROM ocr_records;").fetchone()[0]
             cp_rows = conn.execute(
                 "SELECT video_id, stage_name, status, artifact_count, updated_at FROM pipeline_checkpoints;"
             ).fetchall()
@@ -315,5 +466,6 @@ class MetadataDB:
                 "total_videos": video_cnt,
                 "total_shots": shot_cnt,
                 "total_keyframes": kf_cnt,
+                "total_ocr_records": ocr_cnt,
                 "checkpoints": [dict(r) for r in cp_rows],
             }

@@ -103,6 +103,12 @@ def get_video_details(video_id: str) -> Dict[str, Any]:
 
     shots = db.get_shots(video_id)
     keyframes = db.get_keyframes(video_id)
+    ocr_records = db.get_ocr_records(video_id)
+
+    # Group OCR text by keyframe_id
+    ocr_by_kf: Dict[str, List[str]] = {}
+    for r in ocr_records:
+        ocr_by_kf.setdefault(r.keyframe_id, []).append(r.text_detected)
 
     # Group keyframes by shot_id
     shot_items = []
@@ -132,12 +138,14 @@ def get_video_details(video_id: str) -> Dict[str, Any]:
                 "blur_score": round(k.blur_score, 1),
                 "file_name": file_name,
                 "image_url": f"/api/keyframes/{video_id}/{file_name}",
+                "ocr_texts": ocr_by_kf.get(k.keyframe_id, []),
             })
 
     return {
         "video": video_info,
         "total_shots": len(shots),
         "total_keyframes": len(keyframes),
+        "total_ocr_records": len(ocr_records),
         "shots": shot_items,
     }
 
@@ -325,6 +333,70 @@ def search_visual(
     }
 
 
+@app.get("/api/search/ocr")
+def search_ocr_endpoint(
+    query: str,
+    video_id: Optional[str] = None,
+    top_k: int = 25,
+) -> Dict[str, Any]:
+    """Searches on-screen text using SQLite FTS5 with BM25 ranking."""
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Query string cannot be empty.")
+
+    db = get_db()
+    raw_hits = db.search_ocr(query, limit=top_k * 2)
+
+    if video_id:
+        raw_hits = [h for h in raw_hits if h["video_id"] == video_id]
+
+    candidates = []
+    kf_cache: Dict[str, Dict[str, Any]] = {}
+    rank = 1
+
+    for h in raw_hits:
+        vid = h["video_id"]
+        k_id = h["keyframe_id"]
+
+        if vid not in kf_cache:
+            kf_cache[vid] = {k.keyframe_id: k for k in db.get_keyframes(vid)}
+
+        kf_obj = kf_cache[vid].get(k_id)
+        thumb_url = None
+        shot_id = kf_obj.shot_id if kf_obj else 0
+        if kf_obj:
+            thumb_url = f"/api/keyframes/{vid}/{Path(kf_obj.file_path).name}"
+
+        ts = float(h.get("timestamp_sec", 0.0))
+        mins = int(ts // 60)
+        secs = ts % 60
+        formatted_time = f"{mins:02d}:{secs:05.2f}"
+
+        candidates.append({
+            "rank": rank,
+            "score": round(float(h.get("bm25_score", 0.0)), 4),
+            "video_id": vid,
+            "shot_id": shot_id,
+            "keyframe_id": k_id,
+            "timestamp_sec": round(ts, 2),
+            "start_sec": round(ts, 2),
+            "end_sec": round(ts, 2),
+            "text_detected": h.get("text_detected", ""),
+            "is_ocr": True,
+            "thumbnail_url": thumb_url,
+            "formatted_time": formatted_time,
+        })
+        rank += 1
+        if len(candidates) >= top_k:
+            break
+
+    return {
+        "query": query,
+        "video_id": video_id,
+        "total_results": len(candidates),
+        "candidates": candidates,
+    }
+
+
 @app.post("/api/search/unload")
 def unload_search_model() -> Dict[str, str]:
     """Releases SigLIP2 model from GPU VRAM."""
@@ -344,7 +416,7 @@ def get_db_summary() -> Dict[str, Any]:
     raw_files = sorted([f.stem for f in VIDEOS_DIR.glob("*.mp4")]) if VIDEOS_DIR.exists() else []
 
     # Matrix of stages for each video
-    stages_order = ["shots", "keyframes", "visual", "speech", "ocr"]
+    stages_order = ["shots", "keyframes", "visual", "ocr"]
     cp_by_video: Dict[str, Dict[str, Any]] = {}
     for vid in raw_files:
         cp_by_video[vid] = {s: {"status": "PENDING", "count": 0} for s in stages_order}

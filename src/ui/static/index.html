@@ -95,12 +95,16 @@
 
         <!-- Right Pane: Shot & Keyframe List / Ranked Candidates -->
         <section class="inspector-pane">
-            <!-- Visual Search Bar -->
+            <!-- Search Bar & Modality Selector -->
             <div class="search-query-container">
+                <div class="search-modality-toggle">
+                    <button type="button" class="modality-btn active" id="btnModeVisual" data-mode="visual">&#128247; Visual Search (SigLIP2)</button>
+                    <button type="button" class="modality-btn" id="btnModeOcr" data-mode="ocr">&#128221; On-Screen Text (OCR FTS5)</button>
+                </div>
                 <form id="searchForm" class="search-query-form" onsubmit="event.preventDefault();">
                     <div class="search-query-input-wrap">
                         <span class="search-query-icon">&#128269;</span>
-                        <input type="text" id="queryInput" placeholder="Search moments (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...">
+                        <input type="text" id="queryInput" placeholder="Search visual scenes (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...">
                         <button type="button" id="btnClearQuery" class="btn-clear-query" title="Clear query" style="display: none;">&#10005;</button>
                     </div>
                     <button type="submit" id="btnSearch" class="btn-search-submit">Search</button>
@@ -175,12 +179,11 @@
                                 <th>Shots</th>
                                 <th>Keyframes</th>
                                 <th>Visual</th>
-                                <th>Speech</th>
                                 <th>OCR</th>
                             </tr>
                         </thead>
                         <tbody id="checkpointTableBody">
-                            <tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading database checkpoints...</td></tr>
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading database checkpoints...</td></tr>
                         </tbody>
                     </table>
                 </div>

@@ -13,6 +13,7 @@ let state = {
     searchResults: [],
     activeTab: "shots",
     activeCandidateRank: null,
+    searchMode: "visual",
 };
 
 // DOM Elements
@@ -41,6 +42,8 @@ const searchForm = document.getElementById("searchForm");
 const queryInput = document.getElementById("queryInput");
 const btnClearQuery = document.getElementById("btnClearQuery");
 const btnSearch = document.getElementById("btnSearch");
+const btnModeVisual = document.getElementById("btnModeVisual");
+const btnModeOcr = document.getElementById("btnModeOcr");
 const tabShots = document.getElementById("tabShots");
 const tabResults = document.getElementById("tabResults");
 const tabCheckpoints = document.getElementById("tabCheckpoints");
@@ -269,6 +272,12 @@ function renderShotCards() {
                 const typeClass = kf.is_shot_center ? "center" : "dynamic";
                 const typeLabel = kf.is_shot_center ? "CENTER" : "DYNAMIC";
 
+                let ocrHtml = "";
+                if (kf.ocr_texts && kf.ocr_texts.length > 0) {
+                    const textSample = kf.ocr_texts.slice(0, 3).join(" • ");
+                    ocrHtml = `<div class="kf-ocr-snippets" title="${kf.ocr_texts.join(' | ')}"><span class="ocr-tag">[OCR]</span>${textSample}</div>`;
+                }
+
                 kfItem.innerHTML = `
                     <div class="kf-thumb-wrap">
                         <img src="${kf.image_url}" alt="Keyframe at ${kf.timestamp_sec}s" loading="lazy">
@@ -277,6 +286,7 @@ function renderShotCards() {
                     <div class="kf-details">
                         <span class="kf-time">t=${kf.timestamp_sec.toFixed(2)}s</span>
                         <span class="kf-blur">Blur: ${kf.blur_score}</span>
+                        ${ocrHtml}
                     </div>
                 `;
 
@@ -464,7 +474,7 @@ async function loadCheckpoints() {
             return;
         }
 
-        const stages = ["shots", "keyframes", "visual", "speech", "ocr"];
+        const stages = ["shots", "keyframes", "visual", "ocr"];
 
         matrix.forEach(row => {
             const tr = document.createElement("tr");
@@ -487,9 +497,9 @@ async function loadCheckpoints() {
 }
 
 /**
- * Executes visual search via SigLIP2 + FAISS backend.
+ * Executes search via SigLIP2 + FAISS (Visual) or SQLite FTS5 (OCR).
  */
-async function executeVisualSearch() {
+async function executeSearch() {
     const query = queryInput.value.trim();
     if (!query) return;
 
@@ -498,10 +508,13 @@ async function executeVisualSearch() {
     btnClearQuery.style.display = "block";
     switchTab("results");
 
+    const isOcr = state.searchMode === "ocr";
+    const modeLabel = isOcr ? "Searching on-screen text with SQLite FTS5..." : "Encoding query & searching FAISS index...";
+
     candidateList.innerHTML = `
         <div class="loading-state">
             <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text-main);">
-                Encoding query &amp; searching FAISS index...
+                ${modeLabel}
             </div>
             <div style="color: var(--accent); font-family: var(--font-mono); font-size: 13px;">
                 "${query}"
@@ -511,7 +524,9 @@ async function executeVisualSearch() {
 
     try {
         const vidParam = state.currentVideoId ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
-        const res = await fetch(`/api/search/visual?query=${encodeURIComponent(query)}${vidParam}&top_k=25`);
+        const endpoint = isOcr ? `/api/search/ocr?query=${encodeURIComponent(query)}${vidParam}&top_k=25`
+                              : `/api/search/visual?query=${encodeURIComponent(query)}${vidParam}&top_k=25`;
+        const res = await fetch(endpoint);
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             throw new Error(errData.detail || "Search request failed");
@@ -523,8 +538,8 @@ async function executeVisualSearch() {
         renderCandidateCards();
 
     } catch (err) {
-        console.error("Visual search error:", err);
-        candidateList.innerHTML = `<div class="empty-candidate-state" style="color: var(--color-short);">Error during visual search: ${err.message}</div>`;
+        console.error("Search error:", err);
+        candidateList.innerHTML = `<div class="empty-candidate-state" style="color: var(--color-short);">Error during search: ${err.message}</div>`;
     } finally {
         btnSearch.disabled = false;
         btnSearch.textContent = "Search";
@@ -536,7 +551,7 @@ async function executeVisualSearch() {
  */
 function renderCandidateCards() {
     if (state.searchResults.length === 0) {
-        candidateList.innerHTML = '<div class="empty-candidate-state">No matching visual moments found for this query.</div>';
+        candidateList.innerHTML = '<div class="empty-candidate-state">No matching moments found for this query.</div>';
         return;
     }
 
@@ -564,9 +579,24 @@ function renderCandidateCards() {
             thumbHtml = `<span class="candidate-thumb-placeholder">Shot #${c.shot_id}</span>`;
         }
 
-        // Type badge
-        const typeClass = c.is_shot_pooled ? "pooled" : "keyframe";
-        const typeLabel = c.is_shot_pooled ? "Shot Pooled" : "Keyframe";
+        // Type & Score badges
+        let typeClass = "keyframe";
+        let typeLabel = "Keyframe";
+        let scoreLabel = `Score: ${c.score.toFixed(4)}`;
+
+        if (c.is_ocr) {
+            typeClass = "ocr";
+            typeLabel = "OCR Text";
+            scoreLabel = `BM25: ${c.score.toFixed(2)}`;
+        } else if (c.is_shot_pooled) {
+            typeClass = "pooled";
+            typeLabel = "Shot Pooled";
+        }
+
+        let snippetHtml = "";
+        if (c.text_detected) {
+            snippetHtml = `<div class="candidate-text-snippet"><strong>[Detected Text]</strong> "${c.text_detected}"</div>`;
+        }
 
         card.innerHTML = `
             <div class="candidate-thumb-box">
@@ -576,12 +606,13 @@ function renderCandidateCards() {
             <div class="candidate-content">
                 <div class="candidate-row-top">
                     <div class="candidate-title">Shot #${String(c.shot_id).padStart(3, "0")}</div>
-                    <div class="candidate-score-pill">Score: ${c.score.toFixed(4)}</div>
+                    <div class="candidate-score-pill">${scoreLabel}</div>
                 </div>
                 <div class="candidate-row-bottom">
                     <div class="candidate-time">${c.formatted_time} <span style="color: var(--text-dim); font-size: 11px;">[${c.start_sec.toFixed(1)}s - ${c.end_sec.toFixed(1)}s]</span></div>
                     <span class="candidate-type-badge ${typeClass}">${typeLabel}</span>
                 </div>
+                ${snippetHtml}
             </div>
         `;
 
@@ -654,10 +685,29 @@ function setupEventListeners() {
     btnNextShot.addEventListener("click", jumpNextShot);
     btnJumpCenter.addEventListener("click", jumpCurrentCenter);
 
-    // Visual Search handlers
+    // Modality toggle handlers
+    if (btnModeVisual && btnModeOcr) {
+        btnModeVisual.addEventListener("click", () => {
+            state.searchMode = "visual";
+            btnModeVisual.classList.add("active");
+            btnModeOcr.classList.remove("active");
+            queryInput.placeholder = "Search visual scenes (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...";
+            queryInput.focus();
+        });
+
+        btnModeOcr.addEventListener("click", () => {
+            state.searchMode = "ocr";
+            btnModeOcr.classList.add("active");
+            btnModeVisual.classList.remove("active");
+            queryInput.placeholder = "Search on-screen text (e.g. 'hồ tiêu', 'tây nguyên', 'HTV', 'giá')...";
+            queryInput.focus();
+        });
+    }
+
+    // Search handlers
     searchForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        executeVisualSearch();
+        executeSearch();
     });
 
     queryInput.addEventListener("input", () => {

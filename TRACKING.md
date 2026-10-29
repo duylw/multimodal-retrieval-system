@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 2: On-Screen Text Channel (PaddleOCR & SQLite FTS5)**
-* **Overall Progress:** `50%`
-* **Current Focus:** Completed Task 02C Visual Extraction Optimization & Pure Keyframe Embedding refactoring (removed redundant shot pooling, saving ~40% FAISS vectors). Ingested batch 1 videos, expanding full dataset to 726 videos (~116 GB). Excluded audio/speech channels (Whisper ASR, CLAP) per competition environment constraints. Ready for Task 04 (On-screen Text extraction with PaddleOCR and SQLite FTS5).
+* **Current Stage:** **Milestone 3: Multimodal Fusion & Query Routing (Task 05)**
+* **Overall Progress:** `65%`
+* **Current Focus:** Completed Task 04 On-screen Text Extraction with PaddleOCR on CPU & SQLite FTS5 unicode61 full-text search with automatic diacritic folding (`remove_diacritics 2`). Verified on `L13_V001` (1,580 text items detected across 301 keyframes). Ready for Task 05 (Temporal Multimodal Fusion & Query Routing).
 
 ---
 
@@ -25,8 +25,8 @@
 | **Task 02** | Visual SigLIP2 & FAISS | SigLIP2 embeddings, pure keyframe representation, FAISS indexing | **Completed** | [task-02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md) | `visual.py`, `visual_siglip2.index` |
 | **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **Completed** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
 | **Task 02C** | Visual DataLoader & SigLIP2-Base | Switch to SigLIP2-Base, PyTorch DataLoader num_workers=2, models/ D: drive centralization | **Completed** | [task-02c](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md) | SigLIP2-Base DataLoader pipeline, `models/`, benchmark report |
-| **Task 04** | On-screen Text PaddleOCR | Text keyframe detector, PaddleOCR on CPU, SQLite FTS5 | **Ready** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table |
-| **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Pending** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
+| **Task 04** | On-screen Text PaddleOCR | Text keyframe detector, PaddleOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-paddle-guide.md` |
+| **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Ready** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
 | **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
 
 ---
@@ -42,9 +42,10 @@
   * [x] Shot boundary detection, adaptive keyframe extraction, and SQLite cataloging ([Task 01](file:///d:/UIT/TX/doan/tasks/task-01-shot-detection-keyframes.md)).
   * [x] Interactive debug inspector with HTTP 206 Range streaming and shot timeline synchronization ([Task 01B](file:///d:/UIT/TX/doan/tasks/task-01b-debug-ui-shots-keyframes.md)).
   * [x] Visual embeddings with SigLIP2 and initial `Recall@10` measurement on ground truth benchmark ([Task 02](file:///d:/UIT/TX/doan/tasks/task-02-visual-siglip-faiss.md)).
-* [ ] **Milestone 2: On-Screen Text Channel Integration (PaddleOCR + SQLite FTS5)**
-  * On-screen text extraction with PaddleOCR running on CPU.
-  * SQLite FTS5 full-text search index and BM25 ranking for scene text, subtitles, and captions.
+* [x] **Milestone 2: On-Screen Text Channel Integration (PaddleOCR + SQLite FTS5)**
+  * [x] On-screen text extraction with PaddleOCR running purely on CPU (0MB GPU VRAM).
+  * [x] Morphological edge-density pre-filter (~9ms/frame) pruning non-text frames.
+  * [x] SQLite FTS5 full-text search index (`ocr_fts`) with `unicode61 remove_diacritics 2` for accent-insensitive search.
 * [ ] **Milestone 3: Temporal Multimodal Fusion & Scientific Ablation Study**
   * Sliding window score aggregation (5s) and Reciprocal Rank Fusion (RRF) between Visual and OCR channels.
   * Ablation study tables measuring incremental contributions across Visual Only, Text Only, and Full Fusion.
@@ -98,12 +99,19 @@
   * Refactored [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py) to eliminate shot-level mean pooling in favor of **Pure Keyframe Embeddings** (`1 Keyframe = 1 Vector`), eliminating ~40-50% redundant vectors and search duplicates. Verified on `L13_V001` (348 keyframes = 348 vectors).
   * Excluded audio and speech modalities (Whisper ASR, CLAP) due to competition conditions prohibiting audio playback. Removed `task-03-asr-whisper.md` and `task-07-audio-clap.md`; purged temporary audio directories and configurations.
   * Synchronized [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md) and [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md) to reflect the Visual + OCR multimodal architecture.
+  * Implemented and completed [Task 04: On-Screen Text Extraction with PaddleOCR & SQLite FTS5](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md):
+    * Built core engine [src/extractors/ocr.py](file:///d:/UIT/TX/doan/src/extractors/ocr.py) with morphological edge-density pre-filter (~9ms/frame) and PaddleOCR on CPU (0MB GPU VRAM).
+    * Resolved Windows OpenMP DLL symbol conflict (`WinError 127`) and pinned `paddlepaddle==2.6.2` with `paddleocr==2.10.0`.
+    * Upgraded [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py) with `ocr_records` and `ocr_fts` virtual table using `unicode61 remove_diacritics 2` for accent-insensitive search.
+    * Built standardized CLI runner [src/extractors/run_ocr.py](file:///d:/UIT/TX/doan/src/extractors/run_ocr.py) with pre-flight guards and rollback handlers.
+    * Extracted 1,580 on-screen text snippets from `L13_V001` across 301 keyframes and verified instant BM25 retrieval on queries (*"hồ tiêu"*, *"tây nguyên"*, *"HTV"*).
+    * Authored feature documentation guide [docs/guides/ocr-paddle-guide.md](file:///d:/UIT/TX/doan/docs/guides/ocr-paddle-guide.md).
 
 ---
 
 ## 5. Next Action
-* **Execute [Task 04: On-screen Text Extraction with PaddleOCR & SQLite FTS5](file:///d:/UIT/TX/doan/tasks/task-04-ocr-paddle.md):**
-  1. Implement `OCRExtractor` engine in `src/extractors/ocr.py` using PaddleOCR on CPU with edge-density heuristic filtering.
-  2. Implement standardized CLI runner `src/extractors/run_ocr.py` with pre-flight guards and SQLite checkpointing.
-  3. Create SQLite FTS5 virtual table for full-text keyword search over detected on-screen signage, banners, and subtitles.
-  4. Build standalone indexer integration in `src/indexers/build_indices.py` for OCR text.
+* **Execute [Task 05: Temporal Multimodal Fusion & Query Routing](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md):**
+  1. Implement lightweight query router in `src/retrieval/query_parser.py` (< 1ms rule-based classification into Visual SigLIP2 vs Text OCR).
+  2. Implement Reciprocal Rank Fusion (RRF) in `src/retrieval/score_fusion.py` to harmonize SigLIP2 cosine similarities with SQLite FTS5 BM25 scores.
+  3. Implement 5.0-second sliding temporal window (stride 2.5s) to aggregate multi-channel cross-modal consensus.
+  4. Implement temporal Non-Maximum Suppression (NMS) to merge overlapping candidate spans into coherent moment bounds.
