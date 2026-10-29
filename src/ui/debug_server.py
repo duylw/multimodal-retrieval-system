@@ -65,28 +65,39 @@ def range_stream_generator(
 def list_videos() -> List[Dict[str, Any]]:
     """Returns all cataloged videos along with shot and keyframe counts."""
     db = get_db()
-    videos = db.get_videos()
+    with db._get_connection() as conn:
+        rows = conn.execute("""
+            SELECT 
+                v.video_id,
+                v.file_name,
+                v.duration_sec,
+                v.fps,
+                v.width,
+                v.height,
+                v.total_frames,
+                COUNT(DISTINCT s.shot_id) AS shot_count,
+                COUNT(DISTINCT k.keyframe_id) AS keyframe_count
+            FROM videos v
+            LEFT JOIN shots s ON v.video_id = s.video_id
+            LEFT JOIN keyframes k ON v.video_id = k.video_id
+            GROUP BY v.video_id
+            ORDER BY v.video_id ASC;
+        """).fetchall()
+
     results = []
-
-    for v in videos:
-        vid = v["video_id"]
-        shots = db.get_shots(vid)
-        keyframes = db.get_keyframes(vid)
+    for r in rows:
+        vid = r["video_id"]
         raw_path = VIDEOS_DIR / f"{vid}.mp4"
-        if not raw_path.exists():
-            # Check for other extensions
-            raw_path = next(VIDEOS_DIR.glob(f"{vid}.*"), raw_path)
-
         results.append({
             "video_id": vid,
-            "file_name": v.get("file_name", f"{vid}.mp4"),
-            "duration_sec": v.get("duration_sec", 0.0),
-            "fps": v.get("fps", 0.0),
-            "width": v.get("width", 0),
-            "height": v.get("height", 0),
-            "total_frames": v.get("total_frames", 0),
-            "shot_count": len(shots),
-            "keyframe_count": len(keyframes),
+            "file_name": r["file_name"] or f"{vid}.mp4",
+            "duration_sec": r["duration_sec"] or 0.0,
+            "fps": r["fps"] or 0.0,
+            "width": r["width"] or 0,
+            "height": r["height"] or 0,
+            "total_frames": r["total_frames"] or 0,
+            "shot_count": r["shot_count"],
+            "keyframe_count": r["keyframe_count"],
             "video_exists": raw_path.exists(),
         })
 
@@ -344,10 +355,9 @@ def search_ocr_endpoint(
         raise HTTPException(status_code=400, detail="Query string cannot be empty.")
 
     db = get_db()
-    raw_hits = db.search_ocr(query, limit=top_k * 2)
-
-    if video_id:
-        raw_hits = [h for h in raw_hits if h["video_id"] == video_id]
+    # Pass video_id directly to SQLite query for exact filtering without starving
+    target_vid = video_id.strip() if video_id and video_id.strip() else None
+    raw_hits = db.search_ocr(query, video_id=target_vid, limit=top_k)
 
     candidates = []
     kf_cache: Dict[str, Dict[str, Any]] = {}
@@ -391,7 +401,7 @@ def search_ocr_endpoint(
 
     return {
         "query": query,
-        "video_id": video_id,
+        "video_id": target_vid,
         "total_results": len(candidates),
         "candidates": candidates,
     }
@@ -435,7 +445,12 @@ def get_db_summary() -> Dict[str, Any]:
 
     matrix = []
     for vid, stages in cp_by_video.items():
-        matrix.append({"video_id": vid, "stages": stages})
+        # Check if video has any completed stage
+        has_completed = any(st.get("status") == "COMPLETED" for st in stages.values())
+        matrix.append({"video_id": vid, "stages": stages, "has_completed": has_completed})
+
+    # Sort matrix so videos with COMPLETED stages appear FIRST at the top of the table!
+    matrix.sort(key=lambda x: (not x["has_completed"], x["video_id"]))
 
     summary["matrix"] = matrix
     return summary

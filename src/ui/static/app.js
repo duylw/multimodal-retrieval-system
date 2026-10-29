@@ -447,6 +447,8 @@ function switchTab(tabName) {
     }
 }
 
+let allCheckpointsMatrix = [];
+
 /**
  * Loads database statistics and pipeline checkpoints matrix from backend.
  */
@@ -459,41 +461,60 @@ async function loadCheckpoints() {
         const elVid = document.getElementById("dbTotalVideos");
         const elShots = document.getElementById("dbTotalShots");
         const elKfs = document.getElementById("dbTotalKeyframes");
-        const tbody = document.getElementById("checkpointTableBody");
 
         if (elVid) elVid.textContent = data.total_videos;
         if (elShots) elShots.textContent = data.total_shots;
         if (elKfs) elKfs.textContent = data.total_keyframes;
 
-        if (!tbody) return;
-        tbody.innerHTML = "";
-
-        const matrix = data.matrix || [];
-        if (matrix.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">No videos found in raw_videos/</td></tr>`;
-            return;
-        }
-
-        const stages = ["shots", "keyframes", "visual", "ocr"];
-
-        matrix.forEach(row => {
-            const tr = document.createElement("tr");
-            let tdHtml = `<td><strong>${row.video_id}</strong></td>`;
-
-            stages.forEach(st => {
-                const sObj = row.stages[st] || { status: "PENDING", count: 0 };
-                const stLower = (sObj.status || "PENDING").toLowerCase();
-                let countStr = sObj.count > 0 ? ` (${sObj.count})` : "";
-                tdHtml += `<td><span class="cp-badge ${stLower}">${sObj.status}${countStr}</span></td>`;
-            });
-
-            tr.innerHTML = tdHtml;
-            tbody.appendChild(tr);
-        });
-
+        allCheckpointsMatrix = data.matrix || [];
+        renderCheckpointTable();
     } catch (err) {
         console.error("Error loading checkpoints:", err);
     }
+}
+
+/**
+ * Renders filtered checkpoint rows into the table body.
+ */
+function renderCheckpointTable() {
+    const tbody = document.getElementById("checkpointTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const searchTxt = (document.getElementById("cpSearchInput")?.value || "").trim().toLowerCase();
+    const filterMode = document.getElementById("cpFilterSelect")?.value || "completed";
+
+    let filtered = allCheckpointsMatrix.filter(row => {
+        if (searchTxt && !row.video_id.toLowerCase().includes(searchTxt)) {
+            return false;
+        }
+        const hasCompleted = Object.values(row.stages).some(st => st.status === "COMPLETED");
+        if (filterMode === "completed" && !hasCompleted) return false;
+        if (filterMode === "pending" && hasCompleted) return false;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">No matching video checkpoints found.</td></tr>`;
+        return;
+    }
+
+    const stages = ["shots", "keyframes", "visual", "ocr"];
+
+    filtered.forEach(row => {
+        const tr = document.createElement("tr");
+        let tdHtml = `<td><strong>${row.video_id}</strong></td>`;
+
+        stages.forEach(st => {
+            const sObj = row.stages[st] || { status: "PENDING", count: 0 };
+            const stLower = (sObj.status || "PENDING").toLowerCase();
+            let countStr = sObj.count > 0 ? ` (${sObj.count})` : "";
+            tdHtml += `<td><span class="cp-badge ${stLower}">${sObj.status}${countStr}</span></td>`;
+        });
+
+        tr.innerHTML = tdHtml;
+        tbody.appendChild(tr);
+    });
 }
 
 /**
@@ -523,7 +544,8 @@ async function executeSearch() {
     `;
 
     try {
-        const vidParam = state.currentVideoId ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
+        const scopeCurrent = document.getElementById("chkCurrentVideoOnly")?.checked;
+        const vidParam = (scopeCurrent && state.currentVideoId) ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
         const endpoint = isOcr ? `/api/search/ocr?query=${encodeURIComponent(query)}${vidParam}&top_k=25`
                               : `/api/search/visual?query=${encodeURIComponent(query)}${vidParam}&top_k=25`;
         const res = await fetch(endpoint);
@@ -605,7 +627,10 @@ function renderCandidateCards() {
             </div>
             <div class="candidate-content">
                 <div class="candidate-row-top">
-                    <div class="candidate-title">Shot #${String(c.shot_id).padStart(3, "0")}</div>
+                    <div class="candidate-title">
+                        <span class="candidate-vid-badge">${c.video_id}</span>
+                        Shot #${String(c.shot_id).padStart(3, "0")}
+                    </div>
                     <div class="candidate-score-pill">${scoreLabel}</div>
                 </div>
                 <div class="candidate-row-bottom">
@@ -616,7 +641,11 @@ function renderCandidateCards() {
             </div>
         `;
 
-        card.addEventListener("click", () => {
+        card.addEventListener("click", async () => {
+            if (c.video_id && c.video_id !== state.currentVideoId) {
+                videoSelect.value = c.video_id;
+                await loadVideo(c.video_id);
+            }
             seekVideoTo(c.timestamp_sec);
             highlightCandidateCard(c.rank);
         });
@@ -719,6 +748,12 @@ function setupEventListeners() {
     tabResults.addEventListener("click", () => switchTab("results"));
     if (tabCheckpoints) tabCheckpoints.addEventListener("click", () => switchTab("checkpoints"));
     if (btnRefreshDb) btnRefreshDb.addEventListener("click", loadCheckpoints);
+
+    const cpSearch = document.getElementById("cpSearchInput");
+    if (cpSearch) cpSearch.addEventListener("input", renderCheckpointTable);
+
+    const cpFilter = document.getElementById("cpFilterSelect");
+    if (cpFilter) cpFilter.addEventListener("change", renderCheckpointTable);
 }
 
 // Start app

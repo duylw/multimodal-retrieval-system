@@ -100,6 +100,12 @@
                 <div class="search-modality-toggle">
                     <button type="button" class="modality-btn active" id="btnModeVisual" data-mode="visual">&#128247; Visual Search (SigLIP2)</button>
                     <button type="button" class="modality-btn" id="btnModeOcr" data-mode="ocr">&#128221; On-Screen Text (OCR FTS5)</button>
+                    <div class="search-scope-wrap">
+                        <label class="scope-checkbox-label">
+                            <input type="checkbox" id="chkCurrentVideoOnly">
+                            <span id="lblScopeText">Current Video Only</span>
+                        </label>
+                    </div>
                 </div>
                 <form id="searchForm" class="search-query-form" onsubmit="event.preventDefault();">
                     <div class="search-query-input-wrap">
@@ -168,7 +174,15 @@
 
                 <div class="checkpoint-header-row">
                     <div class="db-table-title">Pipeline Checkpoints Matrix</div>
-                    <button type="button" class="btn-refresh-db" id="btnRefreshDb">&#8635; Refresh</button>
+                    <div class="checkpoint-filter-controls">
+                        <input type="text" id="cpSearchInput" placeholder="Filter video ID (e.g. L13)..." class="cp-search-input">
+                        <select id="cpFilterSelect" class="cp-filter-select">
+                            <option value="all">All (726 Videos)</option>
+                            <option value="completed" selected>Completed Only</option>
+                            <option value="pending">Pending Only</option>
+                        </select>
+                        <button type="button" class="btn-refresh-db" id="btnRefreshDb">&#8635; Refresh</button>
+                    </div>
                 </div>
 
                 <div class="checkpoint-table-wrap">

@@ -400,10 +400,16 @@ class MetadataDB:
                 for r in rows
             ]
 
-    def search_ocr(self, query: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def search_ocr(
+        self,
+        query: str,
+        video_id: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         Executes full-text keyword search across detected on-screen text using SQLite FTS5.
         Normalizes Vietnamese 'd-stroke' (đ/Đ -> d/D) so queries match unaccented Latin OCR output.
+        Optionally scopes search to a specific video_id directly in the SQLite query.
         Returns matches ordered by BM25 relevance score.
         """
         # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
@@ -417,37 +423,38 @@ class MetadataDB:
 
         fts_query = " ".join([f'"{t}"*' for t in terms])
 
+        where_clause = "WHERE ocr_fts MATCH ?"
+        params: List[Any] = [fts_query]
+
+        if video_id:
+            where_clause += " AND video_id = ?"
+            params.append(video_id)
+
+        params.append(limit)
+
+        sql = f"""
+            SELECT 
+                ocr_id,
+                video_id,
+                keyframe_id,
+                timestamp_sec,
+                text_detected,
+                -bm25(ocr_fts) AS bm25_score
+            FROM ocr_fts
+            {where_clause}
+            ORDER BY bm25_score DESC
+            LIMIT ?;
+        """
+
         with self._get_connection() as conn:
             try:
-                cursor = conn.execute("""
-                    SELECT 
-                        ocr_id,
-                        video_id,
-                        keyframe_id,
-                        timestamp_sec,
-                        text_detected,
-                        -bm25(ocr_fts) AS bm25_score
-                    FROM ocr_fts
-                    WHERE ocr_fts MATCH ?
-                    ORDER BY bm25_score DESC
-                    LIMIT ?;
-                """, (fts_query, limit))
+                cursor = conn.execute(sql, tuple(params))
                 rows = cursor.fetchall()
                 return [dict(r) for r in rows]
             except sqlite3.OperationalError:
-                cursor = conn.execute("""
-                    SELECT 
-                        ocr_id,
-                        video_id,
-                        keyframe_id,
-                        timestamp_sec,
-                        text_detected,
-                        -bm25(ocr_fts) AS bm25_score
-                    FROM ocr_fts
-                    WHERE ocr_fts MATCH ?
-                    ORDER BY bm25_score DESC
-                    LIMIT ?;
-                """, (f'"{clean_query}"', limit))
+                # Fallback to exact phrase match if prefix expression fails
+                params[0] = f'"{clean_query}"'
+                cursor = conn.execute(sql, tuple(params))
                 rows = cursor.fetchall()
                 return [dict(r) for r in rows]
 
