@@ -7,6 +7,7 @@ and persists structured text detections for SQLite FTS5 full-text indexing.
 
 import os
 import re
+import gc
 import cv2
 import numpy as np
 from pathlib import Path
@@ -73,10 +74,19 @@ class OCRExtractor(BaseExtractor):
             logger.info("[OK] EasyOCR engine initialized successfully.")
 
     def safe_unload(self) -> None:
-        """Releases OCR engine resources."""
+        """
+        Releases OCR engine resources, flushes PyTorch CUDA caches, and forces garbage collection.
+        """
         if self.ocr_engine is not None:
+            del self.ocr_engine
             self.ocr_engine = None
-            logger.info("[OK] EasyOCR engine unloaded.")
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
+        logger.info("[OK] EasyOCR engine unloaded. GPU VRAM and host RAM released.")
 
     def compute_edge_density(self, img_path: str) -> float:
         """
@@ -188,11 +198,18 @@ class OCRExtractor(BaseExtractor):
         all_records: List[OCRRecord] = []
         prefiltered_count = 0
 
-        for kf in keyframes:
+        for idx, kf in enumerate(keyframes):
             records = self.extract_keyframe(kf)
             if records:
                 all_records.extend(records)
                 prefiltered_count += 1
+            if (idx + 1) % 50 == 0 or (idx + 1) == len(keyframes):
+                logger.info(f"[INFO] Processed {idx + 1}/{len(keyframes)} keyframes ({len(all_records)} text items so far)...")
+
+        # Clean intermediate tensor and memory cache after video extraction
+        gc.collect()
+        if self.use_gpu and torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         logger.info(
             f"[OK] Completed OCR for '{video_id}': {len(all_records)} text items detected "

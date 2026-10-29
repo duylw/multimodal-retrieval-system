@@ -37,7 +37,7 @@ visual_model:
 ocr_model:
   engine: "easyocr"
   language: "vi"
-  use_gpu: false
+  use_gpu: true
   model_dir: "models/easyocr"
   min_confidence: 0.60
   edge_density_threshold: 0.08

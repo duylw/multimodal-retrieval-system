@@ -8,9 +8,11 @@ relational and FTS5 full-text tables, and manages fault tolerance.
 import argparse
 import io
 import sys
+import gc
 from pathlib import Path
 from typing import Dict, List, Optional
 from loguru import logger
+import torch
 
 from src.common.config import ConfigManager
 from src.extractors.ocr import OCRExtractor
@@ -53,6 +55,17 @@ def parse_args() -> argparse.Namespace:
         "--skip-filter",
         action="store_true",
         help="Disable edge-density pre-filter and run EasyOCR on every keyframe."
+    )
+    device_group = parser.add_mutually_exclusive_group()
+    device_group.add_argument(
+        "--gpu",
+        action="store_true",
+        help="Run EasyOCR on GPU (CUDA) for 6-8x speedup (~275MB VRAM footprint)."
+    )
+    device_group.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Run EasyOCR strictly on CPU (0MB GPU VRAM)."
     )
     return parser.parse_args()
 
@@ -106,9 +119,15 @@ def process_video(
         # Save to relational table and FTS5 virtual table
         db.save_ocr_records(ocr_records)
 
-        db.set_checkpoint(video_id, "ocr", "COMPLETED", artifact_count=len(ocr_records))
+        record_count = len(ocr_records)
+        del ocr_records
+        gc.collect()
+        if extractor.use_gpu and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        db.set_checkpoint(video_id, "ocr", "COMPLETED", artifact_count=record_count)
         logger.info(
-            f"[DONE] Saved {len(ocr_records)} on-screen text records to SQLite FTS5 for '{video_id}'."
+            f"[DONE] Saved {record_count} on-screen text records to SQLite FTS5 for '{video_id}'."
         )
         return True
     except KeyboardInterrupt:
@@ -128,6 +147,13 @@ def main() -> int:
     args = parse_args()
     cfg = ConfigManager(args.config).config
     db = MetadataDB(cfg.get("paths", {}).get("metadata_db", "data/metadata.db"))
+    if args.gpu:
+        cfg.setdefault("ocr_model", {})["use_gpu"] = True
+        logger.info("[INFO] Forcing EasyOCR execution on GPU (CUDA) via CLI flag.")
+    elif args.cpu:
+        cfg.setdefault("ocr_model", {})["use_gpu"] = False
+        logger.info("[INFO] Forcing EasyOCR execution on CPU via CLI flag.")
+
     extractor = OCRExtractor(config=cfg)
 
     if args.skip_filter:

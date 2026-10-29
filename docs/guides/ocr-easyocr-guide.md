@@ -13,24 +13,29 @@
 
 ## 2. Quick Start CLI
 
-### Process a Single Video:
+### Process a Single Video on GPU (Recommended for speed):
 ```powershell
-uv run python -m src.extractors.run_ocr --video-id L13_V001
+uv run python -m src.extractors.run_ocr --video-id L13_V001 --gpu
 ```
 
-### Process an Entire Video Directory:
+### Process an Entire Video Directory on GPU:
 ```powershell
-uv run python -m src.extractors.run_ocr --video-dir data/raw_videos
+uv run python -m src.extractors.run_ocr --video-dir data/raw_videos --gpu
+```
+
+### Process on CPU (0MB GPU VRAM):
+```powershell
+uv run python -m src.extractors.run_ocr --video-id L13_V001 --cpu
 ```
 
 ### Force Overwrite Existing OCR Data:
 ```powershell
-uv run python -m src.extractors.run_ocr --video-id L13_V001 --force
+uv run python -m src.extractors.run_ocr --video-id L13_V001 --gpu --force
 ```
 
 ### Bypass Edge-Density Filter (Run on every keyframe):
 ```powershell
-uv run python -m src.extractors.run_ocr --video-id L13_V001 --skip-filter
+uv run python -m src.extractors.run_ocr --video-id L13_V001 --gpu --skip-filter
 ```
 
 ---
@@ -41,6 +46,8 @@ uv run python -m src.extractors.run_ocr --video-id L13_V001 --skip-filter
 | :--- | :--- | :--- | :--- |
 | `--video-id` | `str` | *None* | Target single video ID to process (mutually exclusive with `--video-dir`). |
 | `--video-dir` | `str` | *None* | Path to folder of videos to batch process. |
+| `--gpu` | `flag` | `False` | Run EasyOCR on GPU (CUDA) for 6-8x speedup (~275MB VRAM footprint). |
+| `--cpu` | `flag` | `False` | Run EasyOCR strictly on CPU (0MB GPU VRAM). |
 | `--config` | `str` | `configs/default_config.yaml` | System configuration file. |
 | `--force` | `flag` | `False` | Overwrite existing OCR records for the video. |
 | `--skip-filter` | `flag` | `False` | Bypass morphological edge-density pre-filter and evaluate EasyOCR on every keyframe. |
