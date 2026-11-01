@@ -107,9 +107,8 @@ def process_video(
         db.set_checkpoint(video_id, "ocr", "FAILED", error_message="Zero keyframes found in database.")
         return False
 
-    # 3. Clean slate if forcing
-    if force:
-        rollback_ocr(db, video_id)
+    # 3. Clean slate before execution (always purge any stale/partial records for this video)
+    rollback_ocr(db, video_id)
 
     # 4. Atomic Execution
     db.set_checkpoint(video_id, "ocr", "IN_PROGRESS")
@@ -134,11 +133,17 @@ def process_video(
         logger.error(f"[INTERRUPT] OCR extraction interrupted by user for {video_id}.")
         rollback_ocr(db, video_id)
         db.set_checkpoint(video_id, "ocr", "FAILED", error_message="Interrupted by user (SIGINT).")
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         raise
     except Exception as e:
         logger.error(f"[ERROR] OCR extraction failed for {video_id}: {e}")
         rollback_ocr(db, video_id)
         db.set_checkpoint(video_id, "ocr", "FAILED", error_message=str(e))
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return False
 
 
@@ -178,13 +183,14 @@ def main() -> int:
             summary = {"total": len(video_files), "completed": 0, "skipped": 0, "failed": 0}
             logger.info(f"[INFO] Starting batch on-screen text extraction on {len(video_files)} videos...")
 
-            for vid_path in video_files:
+            for idx, vid_path in enumerate(video_files, 1):
                 video_id = vid_path.stem
                 if not args.force and db.is_stage_completed(video_id, "ocr"):
-                    logger.info(f"[SKIP] OCR text extraction already COMPLETED for {video_id}.")
+                    logger.info(f"[SKIP] [{idx}/{len(video_files)}] OCR text extraction already COMPLETED for {video_id}.")
                     summary["skipped"] += 1
                     continue
 
+                logger.info(f"[INFO] [{idx}/{len(video_files)}] Processing '{video_id}'...")
                 try:
                     ok = process_video(extractor, db, video_id, force=args.force)
                     if ok:

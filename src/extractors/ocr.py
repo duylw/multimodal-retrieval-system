@@ -5,6 +5,7 @@ a morphological edge-density text presence pre-filter to skip non-text frames,
 and persists structured text detections for SQLite FTS5 full-text indexing.
 """
 
+import math
 import os
 import re
 import gc
@@ -94,7 +95,7 @@ class OCRExtractor(BaseExtractor):
         Uses Canny edge detection followed by rectangular morphological closing to cluster text strokes.
         """
         gray = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        if gray is None:
+        if gray is None or gray.size == 0 or gray.shape[0] * gray.shape[1] == 0:
             return 0.0
 
         edges = cv2.Canny(gray, 100, 200)
@@ -170,9 +171,12 @@ class OCRExtractor(BaseExtractor):
         for idx, item in enumerate(results):
             # EasyOCR returns: (bbox, text, prob)
             box, raw_text, score = item
-            confidence = float(score)
+            try:
+                confidence = float(score)
+            except (ValueError, TypeError):
+                continue
 
-            if confidence < self.min_confidence:
+            if math.isnan(confidence) or confidence < self.min_confidence:
                 continue
 
             clean_text = self.normalize_text(raw_text)

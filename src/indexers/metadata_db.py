@@ -21,10 +21,12 @@ class MetadataDB:
         self._init_tables()
 
     def _get_connection(self) -> sqlite3.Connection:
-        """Returns a connection with foreign keys enabled and row factory."""
-        conn = sqlite3.connect(str(self.db_path))
+        """Returns a connection with foreign keys enabled, WAL journal mode, and row factory."""
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
         return conn
 
     def _init_tables(self) -> None:
@@ -331,19 +333,20 @@ class MetadataDB:
             return dict(row) if row else None
 
     def save_ocr_records(self, records: List[OCRRecord]) -> None:
-        """Batch saves OCR detection records into SQLite relational and FTS5 tables."""
+        """Batch saves OCR detection records into SQLite relational and FTS5 tables atomically."""
         if not records:
             return
+        video_id = records[0].video_id
         with self._get_connection() as conn:
+            # Atomically purge existing records for this video to prevent duplicate rows in FTS5
+            conn.execute("DELETE FROM ocr_records WHERE video_id = ?;", (video_id,))
+            conn.execute("DELETE FROM ocr_fts WHERE video_id = ?;", (video_id,))
+
             conn.executemany("""
                 INSERT INTO ocr_records (
                     ocr_id, video_id, keyframe_id, timestamp_sec, text_detected, confidence, bbox_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ocr_id) DO UPDATE SET
-                    text_detected = excluded.text_detected,
-                    confidence = excluded.confidence,
-                    bbox_json = excluded.bbox_json;
+                VALUES (?, ?, ?, ?, ?, ?, ?);
             """, [
                 (
                     r.ocr_id,
