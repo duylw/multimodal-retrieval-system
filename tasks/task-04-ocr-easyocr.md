@@ -3,7 +3,7 @@
 ## 1. Objectives (What)
 * Extract on-screen text appearing in video frames: News banners, tickers, street signboards, dish names, ingredient lists, sports scores, and subtitles.
 * Implement a lightweight **Text Presence Pre-Filter** using morphological edge density to prune 70-80% of non-text keyframes before calling deep neural networks.
-* Run **EasyOCR (Vietnamese)** purely on **CPU multi-processing** with centralized model storage in [models/easyocr/](file:///d:/UIT/TX/doan/models/easyocr), consuming **0MB GPU VRAM** and preserving the GTX 1650 for deep visual models (SigLIP2).
+* Run **EasyOCR (Vietnamese)** purely on **CPU multi-processing** with centralized model storage in `models/easyocr/`, consuming **0MB GPU VRAM** and preserving the GTX 1650 for deep visual models (SigLIP2).
 * Index extracted text and timestamps into SQLite FTS5 with accent and Vietnamese d-stroke folding for high-speed BM25 full-text search.
 
 ---

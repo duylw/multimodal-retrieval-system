@@ -12,7 +12,7 @@ This skill provides step-by-step guidelines for scientific evaluation, ensuring 
 
 ---
 
-## 1. Ground Truth Format ([data/ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json))
+## 1. Ground Truth Format (`data/ground_truth.json`)
 
 Each evaluation item represents a verified query-to-video ground truth interval:
 
