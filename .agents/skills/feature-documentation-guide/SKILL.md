@@ -17,16 +17,17 @@ Core objective: **Simple - Visual - Clear - Immediately Actionable**.
 ## 1. Documentation Principles
 
 1. **Storage Location:**
-   * Every major feature or executable CLI tool must have a corresponding usage guide saved at:
-     `docs/guides/<feature-name>.md` (e.g., `docs/guides/shot-keyframe-inspector.md`, `docs/guides/shot-detection-and-keyframes.md`).
+   * Every major feature or executable CLI tool must have a corresponding usage guide saved in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides) (`<feature-name>.md`, e.g., [shot-keyframe-inspector.md](file:///d:/UIT/TX/doan/docs/guides/shot-keyframe-inspector.md), [shot-detection-and-keyframes.md](file:///d:/UIT/TX/doan/docs/guides/shot-detection-and-keyframes.md)).
 2. **Language Protocol:**
    * 100% English documentation across all sections, tables, code snippets, and comments.
 3. **No Icons / Emojis:**
    * Strictly adhere to project conventions. Use text badges: `[INFO]`, `[OK]`, `[WARNING]`, `[ERROR]`, `[TIP]`.
 4. **No LaTeX & No Mermaid:**
    * Use clean Markdown tables or ASCII art to illustrate user interfaces and workflows.
-5. **Clickable File Links:**
-   * All file paths and directory references must use clickable Markdown links formatted as `file:///...`.
+5. **Clickable File Links (Strict):**
+   * All file paths, directory references, databases, configuration files, and script mentions must use clickable Markdown links formatted as `[display_name](file:///d:/UIT/TX/doan/path/to/file)`.
+   * Never leave paths as raw unlinked text or backticked code spans (e.g. never write bare `data/metadata.db` or `configs/default_config.yaml`).
+   * When referencing directories, link directly to the directory path: `[data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos)`.
 6. **Executable CLI Examples:**
    * All terminal commands must use `uv run python -m ...` with concrete, copy-pasteable examples.
 
@@ -34,7 +35,7 @@ Core objective: **Simple - Visual - Clear - Immediately Actionable**.
 
 ## 2. Standard Guide Template
 
-Each guide document in `docs/guides/<feature-name>.md` must adhere to these 5 core sections:
+Each guide document in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides) (`<feature-name>.md`) must adhere to these 5 core sections:
 
 ```markdown
 # User Guide: [Feature / Module Name]
@@ -72,11 +73,11 @@ Detail all flags, arguments, and options:
 
 ## 4. Inputs & Outputs
 * **Inputs:**
-  * Source video: `data/raw_videos/{video_id}.mp4`
-  * Database: `data/metadata.db`
-  * Configuration: `configs/default_config.yaml`
+  * Source video: [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos) (`{video_id}.mp4`)
+  * Database: [metadata.db](file:///d:/UIT/TX/doan/data/metadata.db)
+  * Configuration: [default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml)
 * **Outputs:**
-  * Image files: `data/keyframes/{video_id}/*.jpg`
+  * Image files: [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes) (`{video_id}/*.jpg`)
   * SQLite tables: Records inserted into `shots`, `keyframes`, `checkpoints`.
 
 ---
@@ -86,7 +87,7 @@ Detail all flags, arguments, and options:
 * **Resume Capability:** How the tool behaves if re-run (e.g., skips completed checkpoints automatically).
 * **Common Issues & Fixes:**
   * Issue 1: Port conflict -> How to change port via environment variable or CLI argument.
-  * Issue 2: Missing video file -> Verify directory structure in `data/raw_videos/`.
+  * Issue 2: Missing video file -> Verify directory structure in [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos).
 ```
 
 ---
@@ -95,6 +96,6 @@ Detail all flags, arguments, and options:
 
 Whenever a task or feature implementation is completed:
 1. Identify the primary executable entrypoint or CLI module.
-2. Create `docs/guides/<feature-name>.md` following the template above.
+2. Create documentation in [docs/guides/](file:///d:/UIT/TX/doan/docs/guides) (`<feature-name>.md`) following the template above.
 3. Test-run the CLI command examples to ensure they execute without syntax errors.
 4. Add reference links in [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md) and [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md).

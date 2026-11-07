@@ -4,12 +4,24 @@ Handles persistence, retrieval, fault-tolerant state tracking, and atomic rollba
 """
 
 import json
+import re
 import sqlite3
+import unicodedata
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from src.common.types import ShotRecord, KeyframeRecord, OCRRecord
+
+
+def fold_vietnamese(text: str) -> str:
+    """Folds Vietnamese diacritics and d-stroke to base unaccented Latin characters."""
+    if not text:
+        return ""
+    nfd = unicodedata.normalize("NFD", text)
+    unaccented = re.sub(r"[\u0300-\u036f]", "", nfd)
+    return unaccented.replace("đ", "d").replace("Đ", "D").lower().strip()
 
 
 class MetadataDB:
@@ -410,21 +422,24 @@ class MetadataDB:
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
-        Executes full-text keyword search across detected on-screen text using SQLite FTS5.
-        Normalizes Vietnamese 'd-stroke' (đ/Đ -> d/D) so queries match unaccented Latin OCR output.
-        Optionally scopes search to a specific video_id directly in the SQLite query.
-        Returns matches ordered by BM25 relevance score.
+        Executes Two-Stage Hybrid Search across detected on-screen text:
+        Stage 1: Coarse candidate retrieval via SQLite FTS5 with Soft OR expansion & BM25 ranking.
+        Stage 2: Fine-grained fuzzy rescoring via token-level SequenceMatcher & diacritic folding.
+        Provides robust resilience against OCR typos, character misrecognitions, and diacritic noise.
         """
-        # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
-        clean_query = query.strip().replace('"', '""').replace('đ', 'd').replace('Đ', 'D')
-        if not clean_query:
+        raw_query = query.strip()
+        if not raw_query:
             return []
 
+        # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
+        clean_query = raw_query.replace('"', '""').replace('đ', 'd').replace('Đ', 'D')
         terms = [t for t in clean_query.split() if t]
         if not terms:
             return []
 
-        fts_query = " ".join([f'"{t}"*' for t in terms])
+        # Stage 1: Coarse Candidate Retrieval (Soft OR with prefix wildcard matching)
+        # Using OR prevents dropping candidate frames when a single word has an OCR typo
+        fts_query = " OR ".join([f'"{t}"*' for t in terms])
 
         where_clause = "WHERE ocr_fts MATCH ?"
         params: List[Any] = [fts_query]
@@ -433,7 +448,9 @@ class MetadataDB:
             where_clause += " AND video_id = ?"
             params.append(video_id)
 
-        params.append(limit)
+        # Retrieve a candidate pool (up to 3x limit, min 100) for fuzzy reranking
+        pool_limit = max(limit * 3, 100)
+        params.append(pool_limit)
 
         sql = f"""
             SELECT 
@@ -452,14 +469,56 @@ class MetadataDB:
         with self._get_connection() as conn:
             try:
                 cursor = conn.execute(sql, tuple(params))
-                rows = cursor.fetchall()
-                return [dict(r) for r in rows]
+                rows = [dict(r) for r in cursor.fetchall()]
             except sqlite3.OperationalError:
-                # Fallback to exact phrase match if prefix expression fails
+                # Fallback to exact phrase match if complex prefix expression fails
                 params[0] = f'"{clean_query}"'
                 cursor = conn.execute(sql, tuple(params))
-                rows = cursor.fetchall()
-                return [dict(r) for r in rows]
+                rows = [dict(r) for r in cursor.fetchall()]
+
+        if not rows:
+            return []
+
+        # Stage 2: Fine-Grained Token-Level Fuzzy Rescoring
+        folded_query = fold_vietnamese(raw_query)
+        query_words = [w for w in folded_query.split() if w]
+        max_bm25 = max((r.get("bm25_score", 1.0) for r in rows), default=1.0)
+        if max_bm25 <= 0.0:
+            max_bm25 = 1.0
+
+        for r in rows:
+            text_detected = r.get("text_detected", "")
+            folded_text = fold_vietnamese(text_detected)
+            cand_words = [w for w in folded_text.split() if w]
+
+            # Word-level alignment similarity: for each query word, find best matching word in candidate text
+            if query_words and cand_words:
+                word_sims = []
+                for qw in query_words:
+                    best_w_sim = max((SequenceMatcher(None, qw, cw).ratio() for cw in cand_words), default=0.0)
+                    word_sims.append(best_w_sim)
+                word_score = sum(word_sims) / len(word_sims)
+            else:
+                word_score = 0.0
+
+            # Substring bonus: exact or near phrase inclusion
+            sub_bonus = 0.0
+            if folded_query in folded_text:
+                sub_bonus = 0.25
+            elif len(folded_query) >= 4 and SequenceMatcher(None, folded_query, folded_text).ratio() >= 0.75:
+                sub_bonus = 0.15
+
+            fuzzy_score = min(word_score + sub_bonus, 1.0)
+            norm_bm25 = r.get("bm25_score", 0.0) / max_bm25
+
+            # Combined score: 35% BM25 lexical frequency + 65% Token-level fuzzy similarity
+            final_score = round(0.35 * norm_bm25 + 0.65 * fuzzy_score, 4)
+            r["score"] = final_score
+            r["fuzzy_score"] = round(fuzzy_score, 4)
+
+        # Re-sort candidates by final hybrid score descending
+        rows.sort(key=lambda x: (x["score"], x.get("bm25_score", 0.0)), reverse=True)
+        return rows[:limit]
 
     def get_database_summary(self) -> Dict[str, Any]:
         """Returns aggregate row counts and checkpoint breakdown across all tables."""

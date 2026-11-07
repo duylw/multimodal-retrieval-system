@@ -60,7 +60,7 @@ This document provides in-depth explanations of the core technical concepts, alg
 * **Two-Stage Pipeline:**
   1. *Text Detection (CRAFT):* Locates text regions and produces bounding polygons.
   2. *Text Recognition (CRNN):* Crops bounding regions and decodes Vietnamese character sequences.
-* **CPU Execution:** Executed entirely on CPU threads with centralized model weights in `models/easyocr/`, reserving 100% of GPU VRAM for SigLIP2 visual embeddings.
+* **CPU Execution:** Executed entirely on CPU threads with centralized model weights in [models/easyocr/](file:///d:/UIT/TX/doan/models/easyocr), reserving 100% of GPU VRAM for SigLIP2 visual embeddings.
 
 ### 2.5. bge-m3 (Dense Text Embedding)
 * **Definition:** BAAI General Embedding Multi-lingual, Multi-functionality, Multi-granularity.

@@ -73,11 +73,11 @@ extractor.safe_unload()
 ## 4. Inputs & Outputs
 
 * **Inputs:**
-  * Keyframe images: `data/keyframes/{video_id}/*.jpg` (from Task 01).
+  * Keyframe images: [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes) (`{video_id}/*.jpg` from Task 01).
   * SQLite metadata: [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db) (`shots` and `keyframes` records).
-  * Centralized Model Cache: `models/models--google--siglip2-base-patch16-256`.
+  * Centralized Model Cache: [models/](file:///d:/UIT/TX/doan/models) (`models--google--siglip2-base-patch16-256`).
 * **Outputs:**
-  * Per-video Feature Cache: `data/features/visual/{video_id}.npz` (contains 768-dim embeddings array + metadata JSON).
+  * Per-video Feature Cache: [data/features/visual/](file:///d:/UIT/TX/doan/data/features/visual) (`{video_id}.npz` containing 768-dim embeddings array + metadata JSON).
   * FAISS Binary Index: [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index) (IndexFlatIP containing 768D L2-normalized vectors).
   * Metadata Mapping JSON: [data/indices/visual_siglip2.json](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.json).
   * SQLite Checkpoint: [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db) (`pipeline_checkpoints` table updated with `visual = COMPLETED`).

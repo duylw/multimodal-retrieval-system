@@ -1,10 +1,10 @@
 # Data Directory Guidelines & Specifications
 
-## 1. Ground Truth Dataset (`ground_truth.json`)
+## 1. Ground Truth Dataset ([ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json))
 * **Current Status:** `[TEMPLATE / SYNTHETIC MOCK]`
 * **Disclaimer:**
   > [!IMPORTANT]
-  > `data/ground_truth.json` is currently a **synthetic template schema** created to test data models, API contracts, evaluation scripts (`evaluate.py`), and CI/CD pipelines. It does **not** contain real ground-truth human annotations.
+  > [data/ground_truth.json](file:///d:/UIT/TX/doan/data/ground_truth.json) is currently a **synthetic template schema** created to test data models, API contracts, evaluation scripts ([evaluate.py](file:///d:/UIT/TX/doan/src/evaluation/evaluate.py)), and CI/CD pipelines. It does **not** contain real ground-truth human annotations.
   > Running evaluation against this template is for baseline integration verification only and does not reflect actual retrieval quality or model capabilities.
 * **Schema Contract:**
   Each evaluation item must adhere to:
@@ -25,8 +25,8 @@
 
 ## 2. Directory Layout & Persistence Rules
 
-* `data/raw_videos/`: Contains original video files (`.mp4`). Ignored by Git.
-* `data/keyframes/`: Output directory for extracted JPEG keyframes organized by video ID (`data/keyframes/{video_id}/`). Ignored by Git.
-* `data/indices/`: FAISS index files (`.index`) and metadata mapping tables (`.json`). Ignored by Git.
-* `data/metadata.db`: SQLite database storing shots, keyframe metadata, and pipeline checkpoints. Ignored by Git.
+* [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos): Contains original video files (`.mp4`). Ignored by Git.
+* [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes): Output directory for extracted JPEG keyframes organized by video ID (`{video_id}/`). Ignored by Git.
+* [data/indices/](file:///d:/UIT/TX/doan/data/indices): FAISS index files (`.index`) and metadata mapping tables (`.json`). Ignored by Git.
+* [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db): SQLite database storing shots, keyframe metadata, and pipeline checkpoints. Ignored by Git.
 * `data/audio_temp/`: Temporary directory for extracted 16kHz WAV audio. Automatically deleted after Whisper transcription.

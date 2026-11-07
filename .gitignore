@@ -26,6 +26,10 @@ data/checkpoints/*
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+data/*.db-wal
+data/*.db-shm
+*.db-wal
+*.db-shm
 
 # Ignore model weights and checkpoints
 models/*

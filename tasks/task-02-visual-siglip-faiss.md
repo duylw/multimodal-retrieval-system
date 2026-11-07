@@ -34,7 +34,7 @@
 
 ### Step 2.3: FAISS Index Construction
 * Construct `faiss.IndexFlatIP(embedding_dim)`.
-* Save index to disk: `data/indices/visual_siglip2.index`.
+* Save index to disk: [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index).
 * Persist metadata mapping table (`faiss_visual_map` in SQLite or `id_map.json`):
   `faiss_id -> {video_id, shot_id, keyframe_id, timestamp_sec, is_shot_pooled}`.
 

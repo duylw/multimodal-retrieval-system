@@ -56,10 +56,10 @@ Configured via [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/defa
 ## 4. Inputs & Outputs
 
 * **Inputs:**
-  * Source video: [data/raw_videos/{video_id}.mp4](file:///d:/UIT/TX/doan/data/raw_videos)
+  * Source video: [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos) (`{video_id}.mp4`)
 * **Outputs:**
   * Metadata Database: [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db) (populates `videos`, `shots`, `keyframes`, `checkpoints` tables).
-  * Extracted JPEG Keyframes: `data/keyframes/{video_id}/shot_{shot_id:04d}_t{timestamp:07.2f}.jpg`.
+  * Extracted JPEG Keyframes: [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes) (`{video_id}/shot_{shot_id:04d}_t{timestamp:07.2f}.jpg`).
 
 ---
 
@@ -69,4 +69,4 @@ Configured via [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/defa
   * Runs entirely on CPU with OpenCV decoding, consuming **0MB GPU VRAM**. Throughput reaches ~470 FPS on standard multi-core CPUs.
 * **Resume Capability:**
   * If a video was previously processed, the extractor queries SQLite and returns in `0.002s` without re-processing.
-  * To force re-extraction: Clear the corresponding checkpoint row in `checkpoints` table or delete `data/metadata.db`.
+  * To force re-extraction: Clear the corresponding checkpoint row in `checkpoints` table or delete [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db).

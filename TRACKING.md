@@ -10,8 +10,8 @@
 ## 1. Overall Status
 
 * **Current Stage:** **Milestone 3: Multimodal Fusion & Query Routing (Task 05)**
-* **Overall Progress:** `65%`
-* **Current Focus:** Completed Task 04 On-screen Text Extraction with EasyOCR on CPU (centralized models in `models/easyocr/`) & SQLite FTS5 unicode61 full-text search with automatic diacritic and Vietnamese d-stroke folding (`remove_diacritics 2`). Ready for Task 05 (Temporal Multimodal Fusion & Query Routing).
+* **Overall Progress:** `75%`
+* **Current Focus:** Completed full-dataset feature extraction across 726/726 videos for both Visual SigLIP2 (321.6MB FAISS Index) and EasyOCR (568,562 FTS5 records). Implemented Two-Stage Fault-Tolerant Hybrid OCR Search (FTS5 Soft OR + Token-level Fuzzy Rescoring) for Known-Item Search. Ready for Task 05 (Temporal Multimodal Fusion & Query Routing).
 
 ---
 
@@ -88,7 +88,7 @@
     * Integrated interactive **Pipeline Checkpoints & DB Inspector** tab on Web Debug UI (`http://127.0.0.1:8000`).
   * Implemented and completed [Task 02C: Visual Feature Extraction Performance Optimization with SigLIP2-Base & DataLoader](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md):
     * Completely eliminated the heavy `siglip2-so400m` model; established `google/siglip2-base-patch16-256` (86M params, 768-dim) as the primary visual model.
-    * Centralized all Hugging Face model weights to `models/` on drive D: (`configs/default_config.yaml`).
+    * Centralized all Hugging Face model weights to [models/](file:///d:/UIT/TX/doan/models) on drive D: ([configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml)).
     * Implemented multithreaded PyTorch `DataLoader` with `KeyframeDataset` and `_collate_pil_images` in [src/extractors/visual.py](file:///d:/UIT/TX/doan/src/extractors/visual.py).
     * Added CLI arguments `--batch-size` and `--num-workers` to [src/extractors/run_visual.py](file:///d:/UIT/TX/doan/src/extractors/run_visual.py).
     * Extracted 338 keyframes for `L13_V001` in 27s; visual embedding for 338 keyframes + 292 shot-pooled vectors (630 total vectors) completed in 66s on GTX 1650 (down from ~330s, >5x speedup; peak VRAM < 600MB).
@@ -100,18 +100,33 @@
   * Excluded audio and speech modalities (Whisper ASR, CLAP) due to competition conditions prohibiting audio playback. Removed `task-03-asr-whisper.md` and `task-07-audio-clap.md`; purged temporary audio directories and configurations.
   * Synchronized [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md) and [TRACKING.md](file:///d:/UIT/TX/doan/TRACKING.md) to reflect the Visual + OCR multimodal architecture.
   * Implemented and completed [Task 04: On-Screen Text Extraction with EasyOCR & SQLite FTS5](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md):
-    * Built core engine [src/extractors/ocr.py](file:///d:/UIT/TX/doan/src/extractors/ocr.py) with morphological edge-density pre-filter (~9ms/frame) and EasyOCR on CPU (0MB GPU VRAM, centralized storage in `models/easyocr/`).
+    * Built core engine [src/extractors/ocr.py](file:///d:/UIT/TX/doan/src/extractors/ocr.py) with morphological edge-density pre-filter (~9ms/frame) and EasyOCR on CPU (0MB GPU VRAM, centralized storage in [models/easyocr/](file:///d:/UIT/TX/doan/models/easyocr)).
     * Replaced legacy PaddleOCR Latin model with native Vietnamese EasyOCR, eliminating Windows OpenMP DLL conflicts and vastly improving Vietnamese diacritics recognition.
     * Upgraded [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py) with `ocr_records` and `ocr_fts` virtual table using `unicode61 remove_diacritics 2` and Vietnamese d-stroke folding (`đ`/`Đ` -> `d`/`D`) for accent-insensitive search.
     * Built standardized CLI runner [src/extractors/run_ocr.py](file:///d:/UIT/TX/doan/src/extractors/run_ocr.py) with pre-flight guards and rollback handlers.
     * Verified on `L13_V001` and integrated instant BM25 retrieval and OCR text badges into Web Debug UI.
     * Authored feature documentation guide [docs/guides/ocr-easyocr-guide.md](file:///d:/UIT/TX/doan/docs/guides/ocr-easyocr-guide.md).
+* **Nov 01 - Nov 07, 2026:**
+  * Completed full dataset batch extraction across **726/726 videos**:
+    * Stage 1 (Shots): 726/726 COMPLETED.
+    * Stage 2 (Keyframes): 726/726 COMPLETED (243,732 sharp keyframes, 5.65 GB).
+    * Stage 3 (Visual SigLIP2): 726/726 COMPLETED; unified FAISS index built at [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index) (321.6 MB).
+    * Stage 4 (EasyOCR): 726/726 COMPLETED; indexed 568,562 text records in SQLite `ocr_records` and `ocr_fts` virtual tables.
+  * Hardened pipeline fault-tolerance:
+    * Enabled SQLite Write-Ahead Logging (`PRAGMA journal_mode = WAL;`) and 30s timeout to allow concurrent Web UI inspection during batch writes.
+    * Bound deletion and re-insertion into the same atomic transaction in `save_ocr_records` to prevent duplicate rows in FTS5.
+    * Added VRAM garbage collection and cache flushing inside exception handlers in [run_ocr.py](file:///d:/UIT/TX/doan/src/extractors/run_ocr.py).
+  * Implemented **Two-Stage Fault-Tolerant Hybrid OCR Search** in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py):
+    * Stage 1: Coarse candidate generation via FTS5 Soft OR (`"term1"* OR "term2"*`) preventing recall failure on single-term typos.
+    * Stage 2: Token-level fuzzy rescoring via Python `difflib.SequenceMatcher` with Vietnamese diacritic folding (`fold_vietnamese()`).
+    * Resolves Known-Item Search (KIS) queries under severe OCR character confusion (e.g. `tô Irùng biển số` matches `trùng biển số` at Rank #1).
+    * Updated [tasks/task-04-ocr-easyocr.md](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) and [docs/guides/ocr-easyocr-guide.md](file:///d:/UIT/TX/doan/docs/guides/ocr-easyocr-guide.md).
 
 ---
 
 ## 5. Next Action
 * **Execute [Task 05: Temporal Multimodal Fusion & Query Routing](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md):**
-  1. Implement lightweight query router in `src/retrieval/query_parser.py` (< 1ms rule-based classification into Visual SigLIP2 vs Text OCR).
-  2. Implement Reciprocal Rank Fusion (RRF) in `src/retrieval/score_fusion.py` to harmonize SigLIP2 cosine similarities with SQLite FTS5 BM25 scores.
+  1. Implement lightweight query router in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) (< 1ms rule-based classification into Visual SigLIP2 vs Text OCR).
+  2. Implement Reciprocal Rank Fusion (RRF) in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py) to harmonize SigLIP2 cosine similarities with SQLite FTS5 BM25 scores.
   3. Implement 5.0-second sliding temporal window (stride 2.5s) to aggregate multi-channel cross-modal consensus.
   4. Implement temporal Non-Maximum Suppression (NMS) to merge overlapping candidate spans into coherent moment bounds.

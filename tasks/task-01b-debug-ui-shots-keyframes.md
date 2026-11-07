@@ -3,7 +3,7 @@
 ## 1. Objectives (What)
 * Build a lightweight, local web-based debugging and inspection tool for verifying video shot segmentation and adaptive keyframe extraction:
   * **Video Selection:** Dynamically list all processed videos cataloged in SQLite `metadata.db`.
-  * **Video Playback with HTTP 206 Range Requests:** Stream local raw video files (`data/raw_videos/{video_id}.mp4`) with smooth, instant seeking across frames and seconds without loading the entire video into RAM.
+  * **Video Playback with HTTP 206 Range Requests:** Stream local raw video files in [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos) (`{video_id}.mp4`) with smooth, instant seeking across frames and seconds without loading the entire video into RAM.
   * **Interactive Shot Boundary Timeline:** Render a proportional timeline representing video duration with color-coded shot segments, displaying exact start/end timestamps and durations on hover.
   * **Shot & Keyframe Inspection Cards:** Display all keyframes nested within their respective shots, accompanied by thumbnails, timestamps (`timestamp_sec`), classification tags (`Center` vs `Dynamic`), and Laplacian blur variance scores.
   * **Two-Way Synchronization:**

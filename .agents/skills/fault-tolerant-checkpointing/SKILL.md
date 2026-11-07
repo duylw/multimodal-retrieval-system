@@ -95,16 +95,16 @@ Each stage must implement a dedicated rollback function to purge partial artifac
 | Stage Name | Clean-up Actions on Failure |
 |---|---|
 | `shots` | `DELETE FROM shots WHERE video_id = ?;` |
-| `keyframes` | Delete all files in `data/keyframes/{video_id}/`; `DELETE FROM keyframes WHERE video_id = ?;` |
-| `visual` | Delete incomplete `data/features/visual/{video_id}.npz` cache file if present. |
-| `speech` | Delete temporary `data/audio_temp/{video_id}_16k.wav`; `DELETE FROM transcripts WHERE video_id = ?;` |
-| `ocr` | `DELETE FROM ocr_texts WHERE video_id = ?;` |
+| `keyframes` | Delete keyframe directory [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes) (`{video_id}/`); `DELETE FROM keyframes WHERE video_id = ?;` |
+| `visual` | Delete incomplete feature cache file in [data/features/visual/](file:///d:/UIT/TX/doan/data/features/visual) (`{video_id}.npz`) if present. |
+| `speech` | Delete temporary audio file in `data/audio_temp/{video_id}_16k.wav`; `DELETE FROM transcripts WHERE video_id = ?;` |
+| `ocr` | `DELETE FROM ocr_records WHERE video_id = ?; DELETE FROM ocr_fts WHERE video_id = ?;` |
 
 ---
 
 ## 5. Dataset Directory Processing Patterns
 
-When processing an entire folder (e.g. `data/raw_videos/*.mp4`), follow this standardized execution structure:
+When processing an entire folder (e.g. [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos) `*.mp4`), follow this standardized execution structure:
 
 ```python
 # Standardized Batch Loop Pattern with Fault Tolerance

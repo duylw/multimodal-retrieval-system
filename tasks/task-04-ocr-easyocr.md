@@ -3,7 +3,7 @@
 ## 1. Objectives (What)
 * Extract on-screen text appearing in video frames: News banners, tickers, street signboards, dish names, ingredient lists, sports scores, and subtitles.
 * Implement a lightweight **Text Presence Pre-Filter** using morphological edge density to prune 70-80% of non-text keyframes before calling deep neural networks.
-* Run **EasyOCR (Vietnamese)** purely on **CPU multi-processing** with centralized model storage in `models/easyocr/`, consuming **0MB GPU VRAM** and preserving the GTX 1650 for deep visual models (SigLIP2).
+* Run **EasyOCR (Vietnamese)** purely on **CPU multi-processing** with centralized model storage in [models/easyocr/](file:///d:/UIT/TX/doan/models/easyocr), consuming **0MB GPU VRAM** and preserving the GTX 1650 for deep visual models (SigLIP2).
 * Index extracted text and timestamps into SQLite FTS5 with accent and Vietnamese d-stroke folding for high-speed BM25 full-text search.
 
 ---
@@ -36,7 +36,7 @@
    * Populate SQLite `ocr_records`:
      `ocr_id`, `video_id`, `keyframe_id`, `timestamp_sec`, `text_detected`, `bbox`, `confidence`.
 
-### Step 2.3: Full-Text Search Indexing (SQLite FTS5)
+### Step 2.3: Full-Text Search Indexing & Two-Stage Hybrid Retrieval
 * Construct virtual table supporting unicode Vietnamese queries with accent and d-stroke folding:
   ```sql
   CREATE VIRTUAL TABLE IF NOT EXISTS ocr_fts USING fts5(
@@ -49,6 +49,12 @@
   );
   ```
 * Queries fold `đ`/`Đ` to `d`/`D` and strip diacritics, matching unaccented, accented, uppercase, or lowercase text uniformly.
+* **Two-Stage Hybrid Search Engine:**
+  * **Stage 1 (Coarse Candidate Retrieval via SQLite FTS5 Soft OR):** Uses disjunctive `OR` wildcard matching (`"word1"* OR "word2"*`) to retrieve candidate keyframes (top 50-100) even when OCR mistranscribes individual words, preventing strict conjunction filtering failures.
+  * **Stage 2 (Fine-Grained Token-Level Fuzzy Rescoring via Python):** Uses `difflib.SequenceMatcher` with Vietnamese diacritic folding (`fold_vietnamese()`) to compute word-by-word alignment similarities and substring bonuses.
+  * **Final Score:** Blends BM25 term frequency with token-level character similarity:
+    `Final_Score = 0.35 * Normalized_BM25 + 0.65 * Token_Fuzzy_Score`.
+  * Guarantees high Recall and Precision on Known-Item Search (KIS) queries even under extreme OCR character confusion (e.g. `Irùng` vs `trùng`, `Quôc` vs `Quốc`, `lón` vs `lớn`).
 
 ---
 

@@ -46,8 +46,7 @@
    * Compute 3D HSV histogram and correlate across intra-shot frames. Retain unique frames with similarity <= 0.95.
 
 ### Step 2.3: Storage and Metadata Persistence
-* Save keyframes as quality 85 JPEG images:
-  `data/keyframes/{video_id}/shot_{shot_id:04d}_t{timestamp_sec:07.2f}.jpg`
+* Save keyframes as quality 85 JPEG images in [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes) (`{video_id}/shot_{shot_id:04d}_t{timestamp_sec:07.2f}.jpg`).
 * Populate SQLite tables in [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db):
   * `shots`: `shot_id`, `video_id`, `start_frame`, `end_frame`, `start_sec`, `end_sec`, `duration_sec`, `fps`.
   * `keyframes`: `keyframe_id`, `video_id`, `shot_id`, `timestamp_sec`, `file_path`, `is_shot_center`, `blur_score`.

@@ -383,7 +383,9 @@ def search_ocr_endpoint(
 
         candidates.append({
             "rank": rank,
-            "score": round(float(h.get("bm25_score", 0.0)), 4),
+            "score": round(float(h.get("score", h.get("bm25_score", 0.0))), 4),
+            "bm25_score": round(float(h.get("bm25_score", 0.0)), 4),
+            "fuzzy_score": round(float(h.get("fuzzy_score", 0.0)), 4),
             "video_id": vid,
             "shot_id": shot_id,
             "keyframe_id": k_id,

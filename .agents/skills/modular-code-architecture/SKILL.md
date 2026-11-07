@@ -49,7 +49,7 @@ To maintain clean code and prevent tight coupling, every Python module in `src/`
 
 ## 2. Layer Responsibilities & Rules
 
-### Layer 1: Common Schemas & Config (`src/common/`)
+### Layer 1: Common Schemas & Config ([src/common/](file:///d:/UIT/TX/doan/src/common))
 * **Allowed Contents:**
   * Dataclasses (`VideoMetadata`, `ShotBoundary`, `KeyframeMetadata`, `CandidateMoment`).
   * Configuration loader (`ConfigManager`).
@@ -58,7 +58,7 @@ To maintain clean code and prevent tight coupling, every Python module in `src/`
   * Never import heavy machine learning frameworks (`torch`, `transformers`, `cv2`, `faster_whisper`, `easyocr`) in Layer 1.
   * Must have zero dependencies on higher layers.
 
-### Layer 2: Core Processing Engines (`src/extractors/`, `src/indexers/`, `src/fusion/`)
+### Layer 2: Core Processing Engines ([src/extractors/](file:///d:/UIT/TX/doan/src/extractors), [src/indexers/](file:///d:/UIT/TX/doan/src/indexers))
 * **Allowed Contents:**
   * Encapsulated engine classes (e.g. `VisualExtractor`, `WhisperExtractor`, `VectorIndex`).
   * Pure methods taking explicit arguments (file paths, frame lists, audio arrays) and returning typed objects or dataclasses.
@@ -68,7 +68,7 @@ To maintain clean code and prevent tight coupling, every Python module in `src/`
   * Never contain batch dataset loops or folder directory crawlers.
   * Never hardcode file paths or database operations unrelated to the engine's core purpose.
 
-### Layer 3: Stage Orchestrators & Runners (`src/extractors/run_*.py`, `src/pipelines/`)
+### Layer 3: Stage Orchestrators & Runners ([src/extractors/](file:///d:/UIT/TX/doan/src/extractors))
 * **Allowed Contents:**
   * Standalone executable entry points (`if __name__ == "__main__":`).
   * CLI argument parsing (`--video-id`, `--video-dir`, `--force`, `--config`).
@@ -76,7 +76,7 @@ To maintain clean code and prevent tight coupling, every Python module in `src/`
 * **Strict Prohibitions:**
   * Never implement raw model inference or low-level algorithms directly in runner scripts; always delegate to Layer 2 classes.
 
-### Layer 4: Serving & Evaluation (`src/ui/`, `src/evaluation/`)
+### Layer 4: Serving & Evaluation ([src/ui/](file:///d:/UIT/TX/doan/src/ui), [src/evaluation/](file:///d:/UIT/TX/doan/src/evaluation))
 * **Allowed Contents:**
   * FastAPI endpoints, static file serving, query search routers.
   * Benchmark evaluation scripts (`evaluate.py`) calculating Recall@K, MRR.
