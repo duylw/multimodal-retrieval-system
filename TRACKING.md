@@ -121,6 +121,11 @@
     * Stage 2: Token-level fuzzy rescoring via Python `difflib.SequenceMatcher` with Vietnamese diacritic folding (`fold_vietnamese()`).
     * Resolves Known-Item Search (KIS) queries under severe OCR character confusion (e.g. `tô Irùng biển số` matches `trùng biển số` at Rank #1).
     * Updated [tasks/task-04-ocr-easyocr.md](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) and [docs/guides/ocr-easyocr-guide.md](file:///d:/UIT/TX/doan/docs/guides/ocr-easyocr-guide.md).
+  * Formulated **Final Round Known-Item Search (KIS) Submission Protocol & DRES Integration**:
+    * Documented comprehensive operational guide in [docs/guides/submission-protocol-guide.md](file:///d:/UIT/TX/doan/docs/guides/submission-protocol-guide.md) covering Textual KIS (5 min window, progressive hints), Video KIS (4 min window, <= 20s clip), mathematical scoring schedule (50 pts accuracy with -10 per wrong attempt, 50 pts time decaying linearly to 0), and trade-off optimization analysis.
+    * Added DRES submission dataclasses to [src/common/types.py](file:///d:/UIT/TX/doan/src/common/types.py) (`DRESAnswer`, `DRESAnswerSet`, `DRESSubmissionPayload`).
+    * Built standardized DRES API v2 client and CLI utility in [src/submission/dres_client.py](file:///d:/UIT/TX/doan/src/submission/dres_client.py) with automated payload formatting (integer milliseconds, video ID extension stripping) and duplicate submission prevention cache.
+
 
 ---
 

@@ -23,6 +23,11 @@ To support academic thesis requirements, the system evaluates against a Ground T
    * Visual Only (SigLIP2 Keyframe Embeddings)
    * Text Only (EasyOCR On-Screen Text with SQLite FTS5 / BM25)
    * Multimodal Fusion (Visual SigLIP2 + On-Screen Text EasyOCR via RRF)
+5. **Competition Known-Item Search (KIS) & DRES Scoring:**
+   * **Textual KIS:** Incremental natural language event description over 5 minutes (`t_L = 300s`).
+   * **Video KIS:** 20-second visual snippet without direct electronic capture, queried over 4 minutes (`t_L = 240s`).
+   * **Mathematical Scoring:** Max 100 points per query (`S = S_acc + S_time`), where accuracy starts at 50 with `-10` points per wrong attempt (`S_acc = max(0, 50 - 10 * w_s)`), and time decays linearly to 0 (`S_time = 50 * (1 - t / t_L)`).
+   * **Submission Protocol:** VBS DRES REST API v2 (`POST /api/v2/submit/{evalID}?session={sessionID}`) submitting `{mediaItemName, start_ms, end_ms}` without file extension. See [submission-protocol-guide.md](file:///d:/UIT/TX/doan/docs/guides/submission-protocol-guide.md).
 
 ---
 
@@ -109,6 +114,8 @@ d:/UIT/TX/doan/
 │       ├── shot-detection-and-keyframes.md
 │       ├── shot-keyframe-inspector.md
 │       ├── visual-siglip-faiss.md
+│       ├── ocr-easyocr-guide.md
+│       ├── submission-protocol-guide.md
 │       └── debug-ui-guide.md
 │
 ├── tasks/                     # Task specifications and implementation roadmaps
@@ -164,6 +171,10 @@ d:/UIT/TX/doan/
 │   │   ├── __init__.py
 │   │   ├── ground_truth.json  # Benchmark queries with ground truth timestamps
 │   │   └── evaluate.py        # Recall@K, MRR, IoU calculation & ablation reporter
+│   │
+│   ├── submission/            # DRES REST API v2 client & KIS payload generator
+│   │   ├── __init__.py
+│   │   └── dres_client.py     # Authentication, evaluation lookup, duplicate-guarded KIS submission
 │   │
 │   └── ui/                    # User interface & developer inspection services
 │       ├── __init__.py

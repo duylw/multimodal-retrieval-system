@@ -76,3 +76,24 @@ class SearchResult:
     matched_modalities: List[str] = field(default_factory=list)
     representative_keyframe_path: Optional[str] = None
     matched_text_snippet: Optional[str] = None
+
+
+@dataclass
+class DRESAnswer:
+    """Represents a single video moment answer for DRES KIS submission."""
+    mediaItemName: str
+    start: int  # Timestamp in milliseconds
+    end: int    # Timestamp in milliseconds
+
+
+@dataclass
+class DRESAnswerSet:
+    """Represents an answer set wrapper required by DRES API v2."""
+    answers: List[DRESAnswer] = field(default_factory=list)
+
+
+@dataclass
+class DRESSubmissionPayload:
+    """Represents the complete submission envelope for DRES API v2."""
+    answerSets: List[DRESAnswerSet] = field(default_factory=list)
+
