@@ -121,3 +121,4 @@ Create a dedicated range selector panel below the scrubber controls:
    * Re-submit same range -> Verify client suppresses duplicate and displays warning banner.
 5. **Score Decay Simulator Test:**
    * Verify elapsed timer ticks upwards and live estimated score decays linearly according to competition rules.
+

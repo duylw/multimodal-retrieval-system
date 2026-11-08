@@ -61,23 +61,23 @@ OFFLINE PHASE (DATA INGESTION, FEATURE CACHING & DECOUPLED INDEXING)
 
 
 ONLINE PHASE (QUERY UNDERSTANDING & TEMPORAL FUSION)
-[User Query (Text / Visual Description)]
+[User Query: Natural Language OR Multi-Cue Composition (+Visual, +OCR)]
         │
         ▼
-[Query Parser & Router] ── (Rule-based Regex + Translation Fallback)
+[Query Parser & Router] ── (Rule-based Routing / Power-User Prefix Parsing)
         │
-        ├─► [Visual Description (EN)] ──► FAISS SigLIP2 Search (Top 200)
+        ├─► [Visual Cues (EN)] ──► FAISS SigLIP2 Multi-Vector Search (Top 200)
         │
-        └─► [On-screen Text / Signage] ──► SQLite FTS5 OCR Search (Top 200)
+        └─► [On-screen Text] ──► SQLite FTS5 + Fuzzy Search (Top 200)
         │
         ▼
-[Score Normalization: Min-Max / Reciprocal Rank Fusion (RRF)]
+[Generalized Multi-Cue Reciprocal Rank Fusion (Multi-Cue RRF)]
         │
         ▼
 [Temporal Fusion: 5-second Sliding Window]
         │
         ▼
-[Temporal Non-Maximum Suppression (NMS) & Final Ranking]
+[Temporal Non-Maximum Suppression (NMS) & Final Ranking: [start_ms, end_ms]]
         │
         ▼
 [Web UI: Search Results + Range 206 Video Streaming + Relevance Feedback]

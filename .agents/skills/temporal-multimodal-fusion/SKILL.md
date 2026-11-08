@@ -12,31 +12,36 @@ This skill outlines the exact procedures for aligning heterogeneous search score
 
 ---
 
-## 1. Query Decomposition (Rule-based Routing)
+## 1. Query Decomposition & Multi-Cue Routing
 
-Avoid slow LLM calls during query time. Parse natural language queries with rule-based patterns (< 1ms latency):
+Avoid slow LLM calls during query time. Parse natural language queries with rule-based patterns (< 1ms latency) and support **Human-in-the-Loop Multi-Cue Composition**:
 
-* Branch OCR (On-screen text):
-  * Trigger: Substrings enclosed in quotes (e.g., '"Pho Hoa"'), terms like "chu", "bang hieu", "ti so", "gia", "text", "signboard".
-  * Action: Route extracted term directly to SQLite FTS5 table `ocr_fts`.
-* Branch Visual (SigLIP2):
-  * Action: Translate Vietnamese query to English via local lightweight translator and encode with SigLIP2 text encoder to search FAISS visual index.
+* **Multi-Cue Syntax Support:**
+  * Power-user prefix: `v: <visual_cue_1> | v: <visual_cue_2> | ocr: <ocr_text>`
+  * Quoted prefix: `<visual_cue> ocr:"<exact_text>"`
+  * Multi-Cue JSON Payload: `{ "visual_queries": [...], "ocr_queries": [...] }`
+* **Branch OCR (On-screen text):**
+  * Trigger: Explicit `ocr:` prefix, substrings enclosed in quotes (`"..."`), or terms like "chu", "bang hieu", "bien so", "text", "signboard".
+  * Action: Route extracted term directly to SQLite FTS5 table `ocr_fts` in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py).
+* **Branch Visual (SigLIP2):**
+  * Action: Translate each visual cue to English if needed via local lightweight translator and encode with SigLIP2 text encoder to search FAISS visual index [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index).
 
 ---
 
-## 2. Score Normalization via Reciprocal Rank Fusion (RRF)
+## 2. Generalized Multi-Cue Reciprocal Rank Fusion (Multi-Cue RRF)
 
-Never add raw similarity scores directly. Cosine similarity ranges in [0.0, 0.4], while SQLite FTS5 / BM25 lexical scores range in [0.0, 30.0+].
+Never add raw similarity scores directly. Cosine similarity ranges in `[0.0, 0.4]`, while SQLite FTS5 / BM25 lexical scores range in `[0.0, 35.0+]`.
 
-### RRF Formula
-For each modality candidate list (Top 100 per channel):
-```
-RRF_score = modality_weight / (60 + rank)
+### Multi-Cue RRF Formula
+For $M$ visual cues and $N$ OCR text queries (Top 100 per cue):
+```text
+RRF_score = Sum_{i=1..M} [ weight_visual / (60 + rank_v_i) ] + Sum_{j=1..N} [ weight_ocr / (60 + rank_ocr_j) ]
 ```
 
 Default Weights:
-* Visual weight: 1.0
-* OCR weight: 1.5 (exact on-screen text match has high signal precision)
+* Visual weight: `1.0` per visual cue
+* OCR weight: `1.5` per OCR text cue (exact on-screen text match carries high discriminative precision)
+* Co-occurrence Boost: Moments co-referenced across multiple visual cues and OCR text receive exponential additive ranking boosts, avoiding semantic dilution.
 
 ---
 

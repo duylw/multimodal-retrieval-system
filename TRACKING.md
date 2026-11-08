@@ -26,7 +26,7 @@
 | **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **Completed** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
 | **Task 02C** | Visual DataLoader & SigLIP2-Base | Switch to SigLIP2-Base, PyTorch DataLoader num_workers=2, models/ D: drive centralization | **Completed** | [task-02c](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md) | SigLIP2-Base DataLoader pipeline, `models/`, benchmark report |
 | **Task 04** | On-screen Text EasyOCR | Text keyframe detector, EasyOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-easyocr-guide.md` |
-| **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Ready** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
+| **Task 05** | Multimodal Fusion & Query Routing | Multi-cue composition (+Visual, +OCR), Generalized RRF, 5s sliding window, temporal NMS | **Ready** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py` |
 | **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | Frame-accurate stepper, Mark In/Out range, interval preview, DRES live submit | **Pending** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css` |
 
@@ -133,14 +133,18 @@
     * Specified frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and keyboard hotkeys (`J`, `L`, arrow keys, `Space`).
     * Designed Mark In (`I`) and Mark Out (`O`) range selection, quick presets (shot bounds, +-2.5s window), and pre-submission range preview player.
     * Outlined 1-click live DRES API submission connector with duplicate suppression and real-time score decay simulator.
-
-
+  * Enhanced **[Task 05: Temporal Multimodal Fusion, Query Routing & Multi-Cue Composition](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md)**:
+    * Upgraded query architecture with **Human-in-the-Loop Multi-Cue Composition** allowing users to combine arbitrary visual cues (`+ Visual: "a blue truck"`, `+ Visual: "heavy rain"`) and OCR text filters (`+ OCR: "51C 456.78"`).
+    * Prevents semantic dilution across complex scene descriptions while giving users 100% deterministic routing control.
+    * Formulated Generalized Multi-Cue Reciprocal Rank Fusion (Multi-Cue RRF) aggregating $M$ visual cues and $N$ OCR queries.
+    * Updated engineering skill runbook [.agents/skills/temporal-multimodal-fusion/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/temporal-multimodal-fusion/SKILL.md).
 
 ---
 
 ## 5. Next Action
-* **Execute [Task 05: Temporal Multimodal Fusion & Query Routing](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md):**
-  1. Implement lightweight query router in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) (< 1ms rule-based classification into Visual SigLIP2 vs Text OCR).
-  2. Implement Reciprocal Rank Fusion (RRF) in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py) to harmonize SigLIP2 cosine similarities with SQLite FTS5 BM25 scores.
-  3. Implement 5.0-second sliding temporal window (stride 2.5s) to aggregate multi-channel cross-modal consensus.
-  4. Implement temporal Non-Maximum Suppression (NMS) to merge overlapping candidate spans into coherent moment bounds.
+* **Execute [Task 05: Temporal Multimodal Fusion, Query Routing & Multi-Cue Composition](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md):**
+  1. Implement multi-cue query parser in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) supporting power-user prefixes (`v:`, `ocr:`) and structured JSON payloads.
+  2. Implement Generalized Multi-Cue RRF in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py) to aggregate rank scores across $M$ visual vectors and $N$ OCR FTS5 hits.
+  3. Implement 5.0-second sliding temporal window (stride 2.5s) to accumulate multi-cue consensus.
+  4. Implement temporal Non-Maximum Suppression (NMS) to merge overlapping candidate windows into coherent moment bounds `[start_ms, end_ms]`.
+
