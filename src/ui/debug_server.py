@@ -697,6 +697,234 @@ def get_db_summary() -> Dict[str, Any]:
     return summary
 
 
+# =========================================================================
+# Task 06B: Temporal Context Filmstrip & DRES Live Submission Endpoints
+# =========================================================================
+
+_dres_client: Optional[Any] = None
+_dres_eval_id: str = "offline_kis_eval"
+_dres_history: List[Dict[str, Any]] = []
+
+
+def get_dres_client() -> Any:
+    """Lazy-initializes DRESClient singleton."""
+    global _dres_client
+    if _dres_client is None:
+        from src.submission.dres_client import DRESClient
+        _dres_client = DRESClient()
+    return _dres_client
+
+
+@app.get("/api/videos/{video_id}/context")
+def get_video_temporal_context(
+    video_id: str,
+    timestamp_sec: float = 0.0,
+    window_sec: float = 15.0
+) -> Dict[str, Any]:
+    """
+    Returns neighbor keyframes and OCR text within [timestamp_sec - window_sec, timestamp_sec + window_sec]
+    for instant Filmstrip inspection (< 5ms) without loading full video stream.
+    """
+    db = get_db()
+    keyframes = db.get_keyframes(video_id)
+    if not keyframes:
+        raise HTTPException(status_code=404, detail=f"No keyframes found for video '{video_id}'.")
+
+    ocr_records = db.get_ocr_records(video_id)
+    ocr_by_kf: Dict[str, List[str]] = {}
+    for r in ocr_records:
+        ocr_by_kf.setdefault(r.keyframe_id, []).append(r.text_detected)
+
+    min_t = max(0.0, timestamp_sec - window_sec)
+    max_t = timestamp_sec + window_sec
+
+    context_frames = []
+    for k in keyframes:
+        if min_t <= k.timestamp_sec <= max_t:
+            fname = Path(k.file_path).name
+            context_frames.append({
+                "keyframe_id": k.keyframe_id,
+                "shot_id": k.shot_id,
+                "timestamp_sec": round(k.timestamp_sec, 2),
+                "delta_sec": round(k.timestamp_sec - timestamp_sec, 2),
+                "image_url": f"/api/keyframes/{video_id}/{fname}",
+                "ocr_texts": ocr_by_kf.get(k.keyframe_id, [])
+            })
+
+    return {
+        "video_id": video_id,
+        "center_sec": round(timestamp_sec, 2),
+        "window_sec": window_sec,
+        "total_frames": len(context_frames),
+        "frames": context_frames
+    }
+
+
+@app.get("/api/dres/status")
+def get_dres_status() -> Dict[str, Any]:
+    """Returns current DRES connection state, active evaluation ID, and submission log."""
+    client = get_dres_client()
+    return {
+        "base_url": client.base_url,
+        "session_id": client.session_id,
+        "evaluation_id": _dres_eval_id,
+        "is_authenticated": bool(client.session_id),
+        "submitted_count": len(client._submitted_cache),
+        "history": list(reversed(_dres_history[-20:]))
+    }
+
+
+@app.post("/api/dres/session")
+def configure_dres_session(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Configures DRES base URL, session token, or logs in with username/password."""
+    global _dres_eval_id
+    client = get_dres_client()
+
+    base_url = str(payload.get("base_url", "")).strip()
+    if base_url:
+        client.base_url = base_url.rstrip("/")
+
+    eval_id = str(payload.get("evaluation_id", "")).strip()
+    if eval_id:
+        _dres_eval_id = eval_id
+
+    session_id = str(payload.get("session_id", "")).strip()
+    if session_id:
+        client.set_session_id(session_id)
+
+    username = str(payload.get("username", "")).strip()
+    password = str(payload.get("password", "")).strip()
+    if username and password:
+        try:
+            client.login(username=username, password=password)
+            active_ev = client.get_active_evaluation()
+            if active_ev and active_ev.get("id"):
+                _dres_eval_id = str(active_ev["id"])
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"DRES login failed: {e}")
+
+    return get_dres_status()
+
+
+@app.post("/api/dres/clear-cache")
+def clear_dres_cache() -> Dict[str, Any]:
+    """Clears local duplicate submission cache and history for a new competition query."""
+    global _dres_history
+    client = get_dres_client()
+    client.clear_cache()
+    _dres_history = []
+    return {"status": "ok", "message": "Duplicate cache and submission history cleared."}
+
+
+@app.post("/api/dres/submit")
+def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Submits a KIS candidate moment to DRES API v2 (or simulates in dry-run mode)
+    with millisecond conversion, extension stripping, and duplicate suppression.
+    """
+    from src.submission.dres_client import (
+        create_kis_submission_payload,
+        format_media_item_name,
+        seconds_to_ms
+    )
+
+    video_id = str(payload.get("video_id", "")).strip()
+    if not video_id:
+        raise HTTPException(status_code=400, detail="video_id is required.")
+
+    try:
+        start_sec = float(payload.get("start_sec", 0.0))
+        end_sec = float(payload.get("end_sec", 0.0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="start_sec and end_sec must be valid numbers.")
+
+    if start_sec < 0.0 or end_sec < start_sec:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid interval: start_sec ({start_sec}) must be >= 0 and <= end_sec ({end_sec})."
+        )
+
+    eval_id = str(payload.get("evaluation_id") or _dres_eval_id or "offline_kis_eval").strip()
+    dry_run = bool(payload.get("dry_run", True))
+    allow_duplicate = bool(payload.get("allow_duplicate", False))
+
+    clean_id = format_media_item_name(video_id)
+    start_ms = seconds_to_ms(start_sec)
+    end_ms = seconds_to_ms(end_sec)
+    dres_payload = create_kis_submission_payload(clean_id, start_sec, end_sec)
+
+    client = get_dres_client()
+    cache_key = (eval_id, clean_id, start_ms, end_ms)
+
+    # Check duplicate submission cache
+    if not allow_duplicate and cache_key in client._submitted_cache:
+        msg = f"[DUPLICATE] {clean_id} [{start_ms}ms - {end_ms}ms] was already submitted for this query."
+        logger.warning(msg)
+        return {
+            "status": "DUPLICATE_PREVENTED",
+            "message": msg,
+            "video_id": clean_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "payload": dres_payload
+        }
+
+    # Dry-run or offline mode when no live DRES server session is active
+    if dry_run or not client.session_id:
+        client._submitted_cache.add(cache_key)
+        entry = {
+            "mode": "DRY_RUN",
+            "video_id": clean_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "evaluation_id": eval_id,
+            "status": "DRY_RUN_ACCEPTED"
+        }
+        _dres_history.append(entry)
+        logger.info(f"[OK] Dry-run KIS submission recorded: {clean_id} [{start_ms}ms - {end_ms}ms]")
+        return {
+            "status": "DRY_RUN_ACCEPTED",
+            "message": f"[OK] Dry-Run Accepted: {clean_id} [{start_ms}ms - {end_ms}ms]",
+            "video_id": clean_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "payload": dres_payload
+        }
+
+    # Live DRES server submission
+    try:
+        server_resp = client.submit_kis(
+            evaluation_id=eval_id,
+            video_id=clean_id,
+            start_sec=start_sec,
+            end_sec=end_sec,
+            allow_duplicate=allow_duplicate
+        )
+        sub_status = str(server_resp.get("submission", server_resp.get("status", "SUBMITTED"))).upper()
+        entry = {
+            "mode": "LIVE",
+            "video_id": clean_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "evaluation_id": eval_id,
+            "status": sub_status,
+            "response": server_resp
+        }
+        _dres_history.append(entry)
+        return {
+            "status": sub_status,
+            "message": f"[OK] DRES Live Response ({sub_status}): {clean_id} [{start_ms}ms - {end_ms}ms]",
+            "video_id": clean_id,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "payload": dres_payload,
+            "server_response": server_resp
+        }
+    except Exception as e:
+        logger.error(f"[ERROR] Live DRES submission failed: {e}")
+        raise HTTPException(status_code=502, detail=f"DRES server error: {e}")
+
+
 # Mount static files and root SPA route
 if (STATIC_DIR / "index.html").exists():
     @app.get("/")

@@ -7,14 +7,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
     <!-- Top Header Bar -->
     <header class="app-header">
         <div class="header-left">
             <div class="logo-badge">UIT MULTIMODAL</div>
-            <h1>Shot & Keyframe <span>Inspector</span></h1>
+            <h1>Shot &amp; Keyframe <span>KIS Console</span></h1>
         </div>
         <div class="header-center">
             <div class="select-wrapper">
@@ -46,7 +46,7 @@
 
     <!-- Main Workspace -->
     <main class="app-main">
-        <!-- Left Pane: Video Player & Timeline -->
+        <!-- Left Pane: Video Player, Scrubber, KIS Submission Console & Timeline -->
         <section class="player-pane">
             <div class="player-card">
                 <div class="video-container">
@@ -60,17 +60,121 @@
                     <div class="current-shot-badge" id="currentShotBadge">Current: Shot #--</div>
                 </div>
 
+                <!-- Fine Frame-Accurate Stepper Bar (Task 06B) -->
+                <div class="fine-stepper-bar">
+                    <button type="button" class="step-btn" id="btnStepBack5s" title="Seek backward 5 seconds">[-5s]</button>
+                    <button type="button" class="step-btn" id="btnStepBack1s" title="Seek backward 1 second (Hotkey: J)">[-1s (J)]</button>
+                    <button type="button" class="step-btn frame-btn" id="btnStepBackFrame" title="Step backward 1 frame / 0.04s (Hotkey: Left Arrow)">[-0.04s]</button>
+                    <button type="button" class="step-btn play-toggle-btn" id="btnTogglePlay" title="Play / Pause (Hotkey: Space)">[Play / Pause]</button>
+                    <button type="button" class="step-btn frame-btn" id="btnStepFwdFrame" title="Step forward 1 frame / 0.04s (Hotkey: Right Arrow)">[+0.04s]</button>
+                    <button type="button" class="step-btn" id="btnStepFwd1s" title="Seek forward 1 second (Hotkey: L)">[+1s (L)]</button>
+                    <button type="button" class="step-btn" id="btnStepFwd5s" title="Seek forward 5 seconds">[+5s]</button>
+                </div>
+
                 <!-- Navigation Quick Controls -->
                 <div class="quick-nav-bar">
                     <button class="nav-btn" id="btnPrevShot" title="Go to previous shot">
-                        <span>&#9664;&#9664;</span> Prev Shot
+                        <span>&lt;&lt;</span> Prev Shot
                     </button>
                     <button class="nav-btn accent-btn" id="btnJumpCenter" title="Jump to center keyframe of current shot">
-                        <span>&#9673;</span> Jump Center Keyframe
+                        <span>[*]</span> Jump Center Keyframe
                     </button>
                     <button class="nav-btn" id="btnNextShot" title="Go to next shot">
-                        Next Shot <span>&#9654;&#9654;</span>
+                        Next Shot <span>&gt;&gt;</span>
                     </button>
+                </div>
+
+                <!-- KIS Mark In / Mark Out & DRES Live Submission Console (Task 06B) -->
+                <div class="kis-console-card" id="kisConsoleCard">
+                    <div class="kis-console-header">
+                        <div class="kis-header-left">
+                            <span class="kis-badge">[KIS SUBMISSION CONSOLE]</span>
+                            <span class="kis-target-label" id="kisTargetLabel">Target: -- | Range: 0ms - 0ms (0.00s)</span>
+                        </div>
+                        <div class="kis-header-right">
+                            <button type="button" class="kis-small-btn" id="btnToggleFilmstrip" title="Inspect +-15s neighbor keyframes around playhead">[Filmstrip +-15s]</button>
+                            <button type="button" class="kis-small-btn" id="btnToggleDresConfig" title="Configure DRES Session &amp; View Submission History">[DRES Settings]</button>
+                        </div>
+                    </div>
+
+                    <!-- Mark In / Out & Presets Row -->
+                    <div class="kis-range-row">
+                        <div class="kis-input-group">
+                            <label for="kisMarkInInput">In (s):</label>
+                            <input type="number" id="kisMarkInInput" step="0.04" min="0" value="0.00" class="kis-time-input">
+                            <button type="button" class="kis-mark-btn" id="btnMarkIn" title="Set Start Time to current playhead (Hotkey: I)">[Set In (I)]</button>
+                        </div>
+                        <div class="kis-input-group">
+                            <label for="kisMarkOutInput">Out (s):</label>
+                            <input type="number" id="kisMarkOutInput" step="0.04" min="0" value="5.00" class="kis-time-input">
+                            <button type="button" class="kis-mark-btn" id="btnMarkOut" title="Set End Time to current playhead (Hotkey: O)">[Set Out (O)]</button>
+                        </div>
+                        <div class="kis-presets-group">
+                            <button type="button" class="kis-preset-btn" id="btnPresetShot" title="Fill Start/End from active shot boundaries">[Shot Bounds]</button>
+                            <button type="button" class="kis-preset-btn" id="btnPresetTight" title="Center tight 1.0s interval [t-0.5s, t+0.5s] around playhead">[Playhead +-0.5s]</button>
+                            <button type="button" class="kis-preset-btn" id="btnPresetWindow" title="Center 5.0s interval [t-2.5s, t+2.5s] around playhead">[Window +-2.5s]</button>
+                            <button type="button" class="kis-preview-btn" id="btnPlayRange" title="Play exclusively from Mark In to Mark Out and auto-pause">[Play Range]</button>
+                        </div>
+                    </div>
+
+                    <!-- Player Temporal Filmstrip Drawer (+-15s Neighbor Keyframes) -->
+                    <div class="player-filmstrip-drawer" id="playerFilmstripDrawer" style="display: none;">
+                        <div class="filmstrip-header">
+                            <span id="playerFilmstripTitle">Temporal Context Filmstrip (+-15s around playhead)</span>
+                            <button type="button" class="kis-small-btn" id="btnRefreshFilmstrip">[Refresh @ Playhead]</button>
+                        </div>
+                        <div class="filmstrip-strip" id="playerFilmstripList"></div>
+                    </div>
+
+                    <!-- Live Score Simulator & Dual Submit Buttons Row -->
+                    <div class="kis-submit-row">
+                        <div class="kis-score-widget">
+                            <select id="kisTaskTypeSelect" class="kis-task-select" title="Competition Task Time Allocation">
+                                <option value="300">Textual KIS (300s)</option>
+                                <option value="240">Video KIS (240s)</option>
+                            </select>
+                            <span class="kis-timer-val" id="kisTimerDisplay">00:00</span>
+                            <button type="button" class="kis-timer-btn" id="btnTimerToggle" title="Start or Pause Query Stopwatch">[Start]</button>
+                            <button type="button" class="kis-timer-btn" id="btnTimerReset" title="Reset Stopwatch &amp; Clear Duplicate Cache for Next Query">[New Query]</button>
+                            <div class="kis-wrong-ctrl">
+                                <span>Wrong: <strong id="kisWrongCount">0</strong></span>
+                                <button type="button" class="kis-timer-btn" id="btnAddWrong" title="Record a wrong attempt (-10 pts)">[+1]</button>
+                                <button type="button" class="kis-timer-btn" id="btnSubWrong" title="Decrease wrong attempt count">[-1]</button>
+                            </div>
+                            <span class="kis-est-score" id="kisEstScoreBadge">Est: 100.0 pts</span>
+                        </div>
+
+                        <div class="kis-submit-actions">
+                            <button type="button" class="btn-kis-quick-submit" id="btnQuickSubmitPlayhead" title="Immediately submit [currentTime - 0.5s, currentTime + 0.5s] (Hotkey: S)">
+                                [Quick Submit @ Playhead (S)]
+                            </button>
+                            <button type="button" class="btn-kis-range-submit" id="btnSubmitRange" title="Submit [Mark In -> Mark Out] interval to DRES">
+                                [Submit Range]
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Submission Feedback Toast -->
+                    <div class="kis-submit-toast" id="kisSubmitToast" style="display: none;"></div>
+
+                    <!-- Collapsible DRES Configuration & Submission History Drawer -->
+                    <div class="kis-dres-config-drawer" id="kisDresConfigDrawer" style="display: none;">
+                        <div class="dres-config-grid">
+                            <label class="dres-dryrun-label">
+                                <input type="checkbox" id="chkDresDryRun" checked>
+                                <span>Dry-Run Mode (Safe local testing without live server)</span>
+                            </label>
+                            <input type="text" id="inputDresUrl" placeholder="DRES Base URL (https://eventretrieval.one)" value="https://eventretrieval.one" class="dres-input">
+                            <input type="text" id="inputDresEvalId" placeholder="Evaluation ID (e.g. offline_kis_eval)" value="offline_kis_eval" class="dres-input">
+                            <input type="text" id="inputDresSession" placeholder="Session ID Token (optional if Dry-Run)" class="dres-input">
+                            <button type="button" class="kis-mark-btn" id="btnSaveDresConfig">[Save Session]</button>
+                            <button type="button" class="kis-preset-btn" id="btnClearDresCache">[Clear Duplicate Cache]</button>
+                        </div>
+                        <div class="dres-history-box" id="dresHistoryBox">
+                            <div class="dres-history-title">Recent Submissions in Current Query:</div>
+                            <div class="dres-history-list" id="dresHistoryList">No submissions yet.</div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Interactive Shot Timeline Section -->
@@ -81,6 +185,7 @@
                     </div>
                     <div class="timeline-track" id="shotTimeline">
                         <!-- Shot segments generated by JavaScript -->
+                        <div class="timeline-range-overlay" id="timelineRangeOverlay" style="display: none;"></div>
                         <div class="timeline-cursor" id="timelineCursor"></div>
                     </div>
                     <div class="timeline-legend">
@@ -88,6 +193,7 @@
                         <div class="legend-item"><span class="legend-dot color-med"></span> Medium (3-8s)</div>
                         <div class="legend-item"><span class="legend-dot color-long"></span> Long (&gt;8s)</div>
                         <div class="legend-item"><span class="legend-dot color-active"></span> Active Playing</div>
+                        <div class="legend-item"><span class="legend-dot color-range"></span> Selected KIS Range [In-Out]</div>
                     </div>
                 </div>
             </div>
@@ -98,9 +204,9 @@
             <!-- Search Bar & Modality Selector -->
             <div class="search-query-container">
                 <div class="search-modality-toggle">
-                    <button type="button" class="modality-btn active" id="btnModeMultimodal" data-mode="auto">&#10024; Hybrid Multi-Cue (Visual + OCR)</button>
-                    <button type="button" class="modality-btn" id="btnModeVisual" data-mode="visual">&#128247; Visual Only (SigLIP2)</button>
-                    <button type="button" class="modality-btn" id="btnModeOcr" data-mode="ocr">&#128221; On-Screen Text (OCR FTS5)</button>
+                    <button type="button" class="modality-btn active" id="btnModeMultimodal" data-mode="auto">[Hybrid Multi-Cue (Visual + OCR)]</button>
+                    <button type="button" class="modality-btn" id="btnModeVisual" data-mode="visual">[Visual Only (SigLIP2)]</button>
+                    <button type="button" class="modality-btn" id="btnModeOcr" data-mode="ocr">[On-Screen Text (OCR FTS5)]</button>
                     <div class="search-scope-wrap">
                         <label class="scope-checkbox-label">
                             <input type="checkbox" id="chkCurrentVideoOnly">
@@ -113,6 +219,7 @@
                 <div class="multi-cue-builder" id="multiCueBuilder">
                     <span class="builder-label">Compose Cues:</span>
                     <button type="button" class="builder-pill-btn" id="btnAddVisualCue" title="Add English Visual description">+ Visual (EN)</button>
+                    <button type="button" class="builder-pill-btn" id="btnAddNegVisualCue" title="Subtract unwanted visual scene (e.g. studio anchor)">- Exclude Visual (EN)</button>
                     <button type="button" class="builder-pill-btn" id="btnAddOcrCue" title="Add Vietnamese/Latin On-Screen Text">+ OCR Text (VI)</button>
                     <button type="button" class="builder-pill-btn builder-pill-seq" id="btnAddSeqStage" title="Add chronological transition stage">&gt;&gt; Sequence</button>
                     <button type="button" class="builder-clear-btn" id="btnClearPills" title="Reset all cues">Clear Cues</button>
@@ -121,9 +228,9 @@
 
                 <form id="searchForm" class="search-query-form" onsubmit="event.preventDefault();">
                     <div class="search-query-input-wrap">
-                        <span class="search-query-icon">&#128269;</span>
-                        <input type="text" id="queryInput" placeholder="Enter multi-cue query (e.g. 'v: news anchor | ocr: thoi su' or 'blue truck')...">
-                        <button type="button" id="btnClearQuery" class="btn-clear-query" title="Clear query" style="display: none;">&#10005;</button>
+                        <span class="search-query-icon">[Q]</span>
+                        <input type="text" id="queryInput" placeholder="Enter multi-cue query (e.g. 'v: news anchor | -v: studio | ocr: thoi su')...">
+                        <button type="button" id="btnClearQuery" class="btn-clear-query" title="Clear query" style="display: none;">[X]</button>
                     </div>
                     <button type="submit" id="btnSearch" class="btn-search-submit">Search</button>
                 </form>
@@ -166,10 +273,10 @@
             <div class="pipeline-trace-panel" id="pipelineTracePanel" style="display: none;">
                 <div class="trace-header" id="traceHeader">
                     <div class="trace-title">
-                        <span class="trace-badge">&#9889; Pipeline Trace</span>
+                        <span class="trace-badge">[TRACE] Pipeline</span>
                         <span class="trace-summary-text" id="traceSummaryText">Decomposed 2 Cues | Turnaround 115ms</span>
                     </div>
-                    <button type="button" class="btn-toggle-trace" id="btnToggleTrace">&#9660; Inspect Per-Cue Hits &amp; Fusion</button>
+                    <button type="button" class="btn-toggle-trace" id="btnToggleTrace">[v] Inspect Per-Cue Hits &amp; Fusion</button>
                 </div>
                 <div class="trace-content" id="traceContent" style="display: none;">
                     <div class="trace-stage-summary" id="traceStageSummary"></div>
@@ -209,7 +316,7 @@
                             <option value="completed" selected>Completed Only</option>
                             <option value="pending">Pending Only</option>
                         </select>
-                        <button type="button" class="btn-refresh-db" id="btnRefreshDb">&#8635; Refresh</button>
+                        <button type="button" class="btn-refresh-db" id="btnRefreshDb">[Refresh]</button>
                     </div>
                 </div>
 
@@ -236,6 +343,6 @@
     <!-- Tooltip Element for Timeline -->
     <div class="timeline-tooltip" id="timelineTooltip"></div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
 </body>
 </html>

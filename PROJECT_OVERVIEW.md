@@ -118,6 +118,8 @@ d:/UIT/TX/doan/
 │       ├── ocr-easyocr-guide.md
 │       ├── multimodal-fusion-guide.md
 │       ├── multimodal-search-ui-guide.md
+│       ├── kis-interactive-submission-guide.md
+│       ├── kis-ui-user-and-strategy-guide.md
 │       ├── submission-protocol-guide.md
 │       └── debug-ui-guide.md
 │

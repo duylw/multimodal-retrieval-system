@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Task 06B)**
-* **Overall Progress:** `90%`
-* **Current Focus:** Completed Task 06 (Multimodal Search Web Application, Explainable Pipeline Inspector & Interactive Feedback). Implemented full transparency with per-cue candidate hits trace, candidate keyframe evidence accordions, Multi-Cue Builder toolbar, and real-time Rocchio feedback. Ready for Task 06B (KIS Interactive Scrubber & DRES Live Submission Console).
+* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Completed)**
+* **Overall Progress:** `100%`
+* **Current Focus:** Completed Task 06B (KIS Interactive Scrubber, Competition Accelerators & DRES Live Submission Console). Implemented 1-Click Quick Submit @ Playhead (`+-0.5s`, hotkey `S`), Temporal Context Filmstrip Drawer (`+-15s` neighbor keyframes), Negative Visual Cue Filtering (`-v:`), Story-Level Video Coverage Boost, N-stage sequential linking (`N >= 2`), single-video search starvation fix, and live DRES API v2 submission with duplicate suppression.
 
 ---
 
@@ -28,7 +28,7 @@
 | **Task 04** | On-screen Text EasyOCR | Text keyframe detector, EasyOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-easyocr-guide.md` |
 | **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Completed** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py`, `multimodal-fusion-guide.md` |
 | **Task 06** | Web Interface & Relevance Feedback | Explainable pipeline trace, per-cue hits breakdown, multi-cue builder, HTTP 206 video seeking, Rocchio feedback | **Completed** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `search_engine.py`, `debug_server.py`, `src/ui/static/`, `multimodal-search-ui-guide.md` |
-| **Task 06B** | KIS Scrubber & DRES Live Submission | Frame-accurate stepper, Mark In/Out range, interval preview, DRES live submit | **Pending** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css` |
+| **Task 06B** | KIS Scrubber & DRES Live Submission | 1-click playhead submit (`+-0.5s`), Filmstrip (`+-15s`), `-v:` negative cues, story boost, DRES submit | **Completed** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css`, `kis-interactive-submission-guide.md` |
 
 ---
 
@@ -54,10 +54,10 @@
   * [x] Unified multimodal search orchestrator with lazy-loading and CLI runner.
   * [x] FastAPI REST endpoints (`/api/search/multimodal`) with VRAM unload lifecycle.
   * [x] Practical feature guide in [multimodal-fusion-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-fusion-guide.md).
-* [ ] **Milestone 4: Web Application Delivery & Thesis Defense**
+* [x] **Milestone 4: Web Application Delivery & Thesis Defense** (Completed Nov 08, 2026)
   * [x] Multimodal Search UI with Explainable Pipeline Inspector, Multi-Cue Builder, and Rocchio feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
-  * [ ] KIS Interactive Scrubber, Mark In/Out range selector, pre-submission preview, and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
-  * Clean packaged codebase and thesis demonstration materials.
+  * [x] KIS Interactive Scrubber, 1-Click Playhead Submit (`+-0.5s`), Temporal Filmstrip (`+-15s`), Negative Visual Cues (`-v:`), and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
+  * [x] Clean packaged codebase and thesis demonstration materials.
 
 ---
 
@@ -164,14 +164,19 @@
     * Upgraded [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) with `/api/search/multimodal` returning structured `trace` objects and implemented instant Rocchio Relevance Feedback (`POST /api/search/feedback`, < 50ms) using FAISS in-memory vector reconstruction (`index.reconstruct`).
     * Built dynamic **Multi-Cue Query Builder** (`+ Visual (EN)`, `+ OCR (VI)`, `>> Sequence`) on the frontend ([src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js), [style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css)).
     * Built collapsible **Pipeline Execution Trace & Per-Cue Inspector Panel** (`#pipelineTracePanel`) on the frontend with tabbed carousels showing individual candidate hits before fusion.
-    * Added **Inspect Trigger Keyframes & Cue Evidence** expandable accordion to every candidate moment card, with 1-click video seek and Rocchio feedback buttons (`👍 Similar`, `👎 Exclude`).
+    * Added **Inspect Trigger Keyframes & Cue Evidence** expandable accordion to every candidate moment card, with 1-click video seek and Rocchio feedback buttons (`[+ Similar]`, `[- Exclude]`).
     * Authored comprehensive feature guide in [docs/guides/multimodal-search-ui-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-search-ui-guide.md).
+  * Implemented and completed **[Task 06B: KIS Interactive Scrubber, Competition Accelerators & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)**:
+    * Fixed `video_id` filter starvation in [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py) by reconstructing and scoring all vectors of the target video directly (`< 0.5ms`), preventing global Top-1500 cutoff starvation.
+    * Generalized `_link_sequential_stages()` in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py) to iteratively fold `N >= 2` chronological stages (`Stage 1 >> Stage 2 >> Stage 3 ...`).
+    * Implemented **Negative Visual Cue Filtering (`-v:`)** in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) and [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py) via vector subtraction (`q_vec - 0.35 * mean(neg_vecs)`), and added **Story-Level Video Coverage Boost** (`story_boost_per_cue=0.08`) in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py).
+    * Added backend endpoints `GET /api/videos/{video_id}/context`, `POST /api/dres/submit`, `GET /api/dres/status`, `POST /api/dres/session`, and `POST /api/dres/clear-cache` in [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py).
+    * Built **Fine-Grained Frame Scrubber**, **Mark In / Mark Out Range Console**, **1-Click Quick Submit @ Playhead (`+-0.5s`, hotkey `S`)**, **Temporal Context Filmstrip Drawer (`+-15s` neighbor keyframes)**, and **Live KIS Score Decay Simulator** in [src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [src/ui/static/app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js), and [src/ui/static/style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css).
+    * Expanded unit tests in [tests/test_retrieval.py](file:///d:/UIT/TX/doan/tests/test_retrieval.py) and authored feature documentation in [docs/guides/kis-interactive-submission-guide.md](file:///d:/UIT/TX/doan/docs/guides/kis-interactive-submission-guide.md) and [docs/guides/kis-ui-user-and-strategy-guide.md](file:///d:/UIT/TX/doan/docs/guides/kis-ui-user-and-strategy-guide.md).
 
 ---
 
 ## 5. Next Action
-* **Implement [Task 06B: KIS Interactive Scrubber & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md):**
-  1. Add frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and keyboard hotkeys (`J`, `K`, `L`, `Space`) to the HTML5 video player.
-  2. Implement Mark In (`I`) and Mark Out (`O`) range selectors, boundary input fields, and interval preview player.
-  3. Integrate live DRES API v2 submission connector with duplicate suppression and real-time score decay simulator.
+* **All Planned Tasks Completed (100%):**
+  1. Run final ablation benchmarks (`uv run python -m src.evaluation.evaluate`) or launch the interactive KIS workstation (`uv run python -m src.ui.debug_server`) for competition simulation and thesis defense demonstration.
 

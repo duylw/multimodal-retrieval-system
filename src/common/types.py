@@ -119,6 +119,7 @@ class QueryStage:
     """Represents a single temporal stage of a multi-cue query."""
     visual_queries: List[str] = field(default_factory=list)
     ocr_queries: List[str] = field(default_factory=list)
+    negative_visual_queries: List[str] = field(default_factory=list)
 
 
 @dataclass

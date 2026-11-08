@@ -40,13 +40,27 @@ def test_query_parser():
     assert p6.stages[0].visual_queries == ["truck"]
     assert p6.stages[0].ocr_queries == ["sign"]
 
+    # Test 7: Negative visual cue (-v:)
+    p7 = QueryParser.parse("v: man speaking | -v: studio news anchor | ocr: VTV1")
+    assert p7.stages[0].visual_queries == ["man speaking"]
+    assert p7.stages[0].negative_visual_queries == ["studio news anchor"]
+    assert p7.stages[0].ocr_queries == ["VTV1"]
+
+    # Test 8: 3-stage chronological sequence (A >> B >> C)
+    p8 = QueryParser.parse("v: wide shot street >> v: car collision >> ocr: 51B")
+    assert p8.is_sequential
+    assert len(p8.stages) == 3
+    assert p8.stages[0].visual_queries == ["wide shot street"]
+    assert p8.stages[1].visual_queries == ["car collision"]
+    assert p8.stages[2].ocr_queries == ["51B"]
+
     print("[OK] All QueryParser tests passed successfully!")
 
 
 def test_score_fusion():
     from src.retrieval.score_fusion import TemporalMomentFusor, MaxPerCueRRFStrategy
 
-    strategy = MaxPerCueRRFStrategy(k_rrf=60, consensus_boost_per_cue=0.25)
+    strategy = MaxPerCueRRFStrategy(k_rrf=60, consensus_boost_per_cue=0.25, story_boost_per_cue=0.08)
     fusor = TemporalMomentFusor(strategy=strategy)
 
     # Test Case 1: Anti-Double-Counting vs Multi-Cue Consensus
@@ -79,7 +93,19 @@ def test_score_fusion():
     assert "v1" in moments[0].matched_cues and "ocr1" in moments[0].matched_cues
     assert moments[1].video_id == "V_A"
 
-    print("[OK] Max-Per-Cue and Consensus Multiplier test passed!")
+    # Test Case 2: 3-Stage Chronological Sequence Linking (Stage 1 >> Stage 2 >> Stage 3)
+    s1_hits = {"s1_v": [{"video_id": "V_SEQ", "keyframe_id": "kf1", "timestamp_sec": 10.0, "score": 0.8}]}
+    s2_hits = {"s2_v": [{"video_id": "V_SEQ", "keyframe_id": "kf2", "timestamp_sec": 18.0, "score": 0.85}]}
+    s3_hits = {"s3_o": [{"video_id": "V_SEQ", "keyframe_id": "kf3", "timestamp_sec": 26.0, "score": 0.9, "text_detected": "END"}]}
+    seq_types = {"s1_v": "visual", "s2_v": "visual", "s3_o": "ocr"}
+    seq_moments = fusor.fuse_and_nms([s1_hits, s2_hits, s3_hits], seq_types, weights, top_k=5)
+    assert len(seq_moments) == 1
+    assert seq_moments[0].video_id == "V_SEQ"
+    assert seq_moments[0].start_sec <= 10.0
+    assert seq_moments[0].end_sec >= 26.0
+    assert set(seq_moments[0].matched_cues) == {"s1_v", "s2_v", "s3_o"}
+
+    print("[OK] Max-Per-Cue, Consensus Multiplier, and 3-Stage Sequence Linking tests passed!")
 
 
 def test_search_with_trace():
@@ -105,7 +131,47 @@ def test_search_with_trace():
         engine.safe_unload()
 
 
+def test_kis_endpoints():
+    from src.ui.debug_server import (
+        get_video_temporal_context,
+        get_dres_status,
+        submit_to_dres,
+        clear_dres_cache,
+    )
+
+    # 1. Test Temporal Context Filmstrip (+-15s Neighbor Keyframes)
+    ctx = get_video_temporal_context(video_id="L13_V001", timestamp_sec=30.0, window_sec=15.0)
+    assert ctx["video_id"] == "L13_V001"
+    assert ctx["total_frames"] > 0
+    assert len(ctx["frames"]) == ctx["total_frames"]
+    assert any(abs(f["delta_sec"]) <= 15.0 for f in ctx["frames"])
+
+    # 2. Test DRES Submission & Duplicate Guard
+    clear_dres_cache()
+    payload = {
+        "video_id": "L13_V001.mp4",
+        "start_sec": 25.0,
+        "end_sec": 26.0,
+        "dry_run": True,
+    }
+    res1 = submit_to_dres(payload)
+    assert res1["status"] == "DRY_RUN_ACCEPTED"
+    assert res1["video_id"] == "L13_V001"
+    assert res1["start_ms"] == 25000
+    assert res1["end_ms"] == 26000
+
+    # Submitting the exact same interval should trigger duplicate protection
+    res2 = submit_to_dres(payload)
+    assert res2["status"] == "DUPLICATE_PREVENTED"
+
+    status = get_dres_status()
+    assert status["submitted_count"] == 1
+    clear_dres_cache()
+    print("[OK] Task 06B KIS Context Filmstrip and DRES Submission tests passed!")
+
+
 if __name__ == "__main__":
     test_query_parser()
     test_score_fusion()
     test_search_with_trace()
+    test_kis_endpoints()

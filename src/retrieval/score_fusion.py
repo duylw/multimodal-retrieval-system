@@ -40,12 +40,19 @@ class MaxPerCueRRFStrategy(FusionStrategy):
     """
     Max-Per-Cue Reciprocal Rank Fusion Strategy.
     Prevents intra-window double-counting by taking the maximum RRF score per cue within
-    each temporal window, applying a multi-cue consensus multiplier, and merging via NMS.
+    each temporal window, applying a multi-cue consensus multiplier, story-level coverage boost,
+    and merging via NMS.
     """
 
-    def __init__(self, k_rrf: int = 60, consensus_boost_per_cue: float = 0.25):
+    def __init__(
+        self,
+        k_rrf: int = 60,
+        consensus_boost_per_cue: float = 0.25,
+        story_boost_per_cue: float = 0.08
+    ):
         self.k_rrf = k_rrf
         self.consensus_boost_per_cue = consensus_boost_per_cue
+        self.story_boost_per_cue = story_boost_per_cue
 
     def fuse_single_stage(
         self,
@@ -73,6 +80,8 @@ class MaxPerCueRRFStrategy(FusionStrategy):
 
         # Key: (video_id, window_idx) -> { cue_id: max_rrf_score, "hits": [best_hit_per_cue] }
         windows: Dict[Tuple[str, int], Dict[str, Any]] = {}
+        # Track story-level cue coverage per video across its entire timeline
+        video_cues_covered: Dict[str, Set[str]] = {}
         total_cues = len(hits_by_cue)
 
         for cue_id, hits in hits_by_cue.items():
@@ -85,11 +94,12 @@ class MaxPerCueRRFStrategy(FusionStrategy):
                 if not vid:
                     continue
 
+                video_cues_covered.setdefault(vid, set()).add(cue_id)
+
                 # Pointwise RRF score for this hit under this cue
                 rrf_score = w_mod / (self.k_rrf + rank_idx)
 
                 # Determine all sliding windows overlapping with timestamp ts
-                # Window i starts at i * stride_sec and spans to i * stride_sec + window_size_sec
                 min_win_idx = max(0, int((ts - window_size_sec) // stride_sec) + 1)
                 max_win_idx = int(ts // stride_sec)
 
@@ -115,7 +125,7 @@ class MaxPerCueRRFStrategy(FusionStrategy):
                         windows[w_key]["cue_scores"][cue_id] = rrf_score
                         windows[w_key]["best_hits"][cue_id] = hit
 
-        # Aggregate raw scores and apply Multi-Cue Consensus Multiplier
+        # Aggregate raw scores and apply Multi-Cue Consensus + Story Coverage Multipliers
         candidate_windows: List[Dict[str, Any]] = []
         for (vid, win_idx), win_data in windows.items():
             cue_scores = win_data["cue_scores"]
@@ -125,13 +135,20 @@ class MaxPerCueRRFStrategy(FusionStrategy):
 
             raw_score = sum(cue_scores.values())
 
-            # Apply consensus multiplier if multi-cue query
+            # Apply window-level consensus multiplier if multi-cue query
             if total_cues > 1 and k_matched > 1:
-                multiplier = 1.0 + self.consensus_boost_per_cue * (k_matched - 1)
+                win_multiplier = 1.0 + self.consensus_boost_per_cue * (k_matched - 1)
             else:
-                multiplier = 1.0
+                win_multiplier = 1.0
 
-            final_score = raw_score * multiplier
+            # Apply video-level story coverage multiplier if multiple cues appear anywhere in the same video
+            vid_cues_cnt = len(video_cues_covered.get(vid, set()))
+            if total_cues > 1 and vid_cues_cnt > 1:
+                story_multiplier = 1.0 + self.story_boost_per_cue * (vid_cues_cnt - 1)
+            else:
+                story_multiplier = 1.0
+
+            final_score = raw_score * win_multiplier * story_multiplier
             best_hit = max(win_data["best_hits"].values(), key=lambda h: float(h.get("score", 0.0)))
 
             candidate_windows.append({
@@ -141,6 +158,7 @@ class MaxPerCueRRFStrategy(FusionStrategy):
                 "score": final_score,
                 "matched_cues": list(cue_scores.keys()),
                 "k_matched": k_matched,
+                "story_cues_matched": vid_cues_cnt,
                 "best_hit": best_hit,
                 "cue_hits": dict(win_data["best_hits"])
             })
@@ -204,51 +222,55 @@ class TemporalMomentFusor:
         fused_stages: List[List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
         """
-        Chains ordered stages (Stage 1 >> Stage 2) within each video within max_sequence_gap_sec.
+        Chains ordered stages (Stage 1 >> Stage 2 >> ... >> Stage N) iteratively
+        within each video where adjacent stages occur within max_sequence_gap_sec.
         """
-        stage_1_windows = fused_stages[0]
-        stage_2_windows = fused_stages[1]
+        current_windows = fused_stages[0]
 
-        # Group Stage 2 by video_id for fast lookup
-        s2_by_vid: Dict[str, List[Dict[str, Any]]] = {}
-        for w in stage_2_windows:
-            s2_by_vid.setdefault(w["video_id"], []).append(w)
+        for stage_idx in range(1, len(fused_stages)):
+            next_stage_windows = fused_stages[stage_idx]
+            s_next_by_vid: Dict[str, List[Dict[str, Any]]] = {}
+            for w in next_stage_windows:
+                s_next_by_vid.setdefault(w["video_id"], []).append(w)
 
-        linked_candidates: List[Dict[str, Any]] = []
+            linked_candidates: List[Dict[str, Any]] = []
 
-        for w1 in stage_1_windows:
-            vid = w1["video_id"]
-            matching_s2 = s2_by_vid.get(vid, [])
+            for w1 in current_windows:
+                vid = w1["video_id"]
+                matching_next = s_next_by_vid.get(vid, [])
 
-            found_link = False
-            for w2 in matching_s2:
-                time_delta = w2["start_sec"] - w1["start_sec"]
-                # Must occur chronologically within sequence gap horizon
-                if 0.0 <= time_delta <= self.max_sequence_gap_sec:
-                    seq_score = w1["score"] + w2["score"] + self.sequence_bonus
-                    merged_cue_hits = {}
-                    if "cue_hits" in w1:
-                        merged_cue_hits.update(w1["cue_hits"])
-                    if "cue_hits" in w2:
-                        merged_cue_hits.update(w2["cue_hits"])
+                best_link: Optional[Dict[str, Any]] = None
+                for w2 in matching_next:
+                    # Measure gap from previous stage start (or end) to next stage start
+                    time_delta = w2["start_sec"] - w1["start_sec"]
+                    if 0.0 <= time_delta <= self.max_sequence_gap_sec * stage_idx:
+                        seq_score = w1["score"] + w2["score"] + self.sequence_bonus
+                        if best_link is None or seq_score > best_link["score"]:
+                            merged_cue_hits = {}
+                            if "cue_hits" in w1:
+                                merged_cue_hits.update(w1["cue_hits"])
+                            if "cue_hits" in w2:
+                                merged_cue_hits.update(w2["cue_hits"])
 
-                    linked_candidates.append({
-                        "video_id": vid,
-                        "start_sec": w1["start_sec"],
-                        "end_sec": max(w1["end_sec"], w2["end_sec"]),
-                        "score": seq_score,
-                        "matched_cues": list(set(w1["matched_cues"] + w2["matched_cues"])),
-                        "best_hit": w1.get("best_hit") or w2.get("best_hit"),
-                        "cue_hits": merged_cue_hits
-                    })
-                    found_link = True
+                            best_link = {
+                                "video_id": vid,
+                                "start_sec": w1["start_sec"],
+                                "end_sec": max(w1["end_sec"], w2["end_sec"]),
+                                "score": seq_score,
+                                "matched_cues": list(set(w1["matched_cues"] + w2["matched_cues"])),
+                                "best_hit": w1.get("best_hit") or w2.get("best_hit"),
+                                "cue_hits": merged_cue_hits
+                            }
 
-            if not found_link:
-                # Include unlinked stage 1 window with slightly decayed score
-                linked_candidates.append(w1)
+                if best_link is not None:
+                    linked_candidates.append(best_link)
+                else:
+                    linked_candidates.append(w1)
 
-        linked_candidates.sort(key=lambda x: x["score"], reverse=True)
-        return linked_candidates
+            linked_candidates.sort(key=lambda x: x["score"], reverse=True)
+            current_windows = linked_candidates
+
+        return current_windows
 
     def _apply_temporal_nms(
         self,

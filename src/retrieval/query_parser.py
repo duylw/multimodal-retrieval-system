@@ -74,8 +74,13 @@ class QueryParser:
             for st in seq_stages_data:
                 v_q = [str(q).strip() for q in st.get("visual_queries", []) if str(q).strip()]
                 o_q = [str(q).strip() for q in st.get("ocr_queries", []) if str(q).strip()]
+                neg_v_q = [str(q).strip() for q in st.get("negative_visual_queries", []) if str(q).strip()]
                 if v_q or o_q:
-                    stages.append(QueryStage(visual_queries=v_q, ocr_queries=o_q))
+                    stages.append(QueryStage(
+                        visual_queries=v_q,
+                        ocr_queries=o_q,
+                        negative_visual_queries=neg_v_q
+                    ))
 
             if stages:
                 return ParsedMultiCueQuery(stages=stages, is_sequential=len(stages) > 1, weights=weights)
@@ -83,8 +88,13 @@ class QueryParser:
         # Flat visual and OCR queries
         visual_queries = [str(q).strip() for q in data.get("visual_queries", []) if str(q).strip()]
         ocr_queries = [str(q).strip() for q in data.get("ocr_queries", []) if str(q).strip()]
+        neg_visual_queries = [str(q).strip() for q in data.get("negative_visual_queries", []) if str(q).strip()]
 
-        single_stage = QueryStage(visual_queries=visual_queries, ocr_queries=ocr_queries)
+        single_stage = QueryStage(
+            visual_queries=visual_queries,
+            ocr_queries=ocr_queries,
+            negative_visual_queries=neg_visual_queries
+        )
         return ParsedMultiCueQuery(stages=[single_stage], is_sequential=False, weights=weights)
 
     @classmethod
@@ -108,8 +118,8 @@ class QueryParser:
         if inline_ocr is not None:
             return inline_ocr
 
-        # Check for multi-cue separated by '|' or explicitly starting with 'v:' or 'ocr:'
-        if "|" in text or re.match(r"^(?:v|ocr):\s*", text, re.IGNORECASE):
+        # Check for multi-cue separated by '|' or explicitly starting with 'v:', '-v:', or 'ocr:'
+        if "|" in text or re.match(r"^(?:-?v|ocr):\s*", text, re.IGNORECASE):
             return cls._parse_prefixed_cues(text)
 
         # Fallback to pure natural language parsing
@@ -117,9 +127,10 @@ class QueryParser:
 
     @classmethod
     def _parse_prefixed_cues(cls, text: str) -> QueryStage:
-        """Parses multi-cue tokens separated by '|' using 'v:' and 'ocr:' prefixes."""
+        """Parses multi-cue tokens separated by '|' using 'v:', '-v:', and 'ocr:' prefixes."""
         visuals: List[str] = []
         ocrs: List[str] = []
+        neg_visuals: List[str] = []
 
         tokens = [t.strip() for t in text.split("|") if t.strip()]
         for token in tokens:
@@ -127,6 +138,10 @@ class QueryParser:
                 val = re.sub(r"^ocr:\s*", "", token, flags=re.IGNORECASE).strip().strip('"').strip("'")
                 if val:
                     ocrs.append(val)
+            elif re.match(r"^-v:\s*", token, re.IGNORECASE):
+                val = re.sub(r"^-v:\s*", "", token, flags=re.IGNORECASE).strip()
+                if val:
+                    neg_visuals.append(val)
             elif re.match(r"^v:\s*", token, re.IGNORECASE):
                 val = re.sub(r"^v:\s*", "", token, flags=re.IGNORECASE).strip()
                 if val:
@@ -135,7 +150,11 @@ class QueryParser:
                 # Default non-prefixed cue to visual description
                 visuals.append(token)
 
-        return QueryStage(visual_queries=visuals, ocr_queries=ocrs)
+        return QueryStage(
+            visual_queries=visuals,
+            ocr_queries=ocrs,
+            negative_visual_queries=neg_visuals
+        )
 
     @classmethod
     def _extract_inline_ocr(cls, text: str) -> Optional[QueryStage]:

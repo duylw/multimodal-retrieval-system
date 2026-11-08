@@ -18,6 +18,14 @@ let state = {
     searchMode: "auto",
     feedbackPositives: new Set(),
     feedbackNegatives: new Set(),
+    markInSec: 0.0,
+    markOutSec: 5.0,
+    isPlayingRange: false,
+    kisElapsedSec: 0,
+    kisTimerRunning: false,
+    kisTimerInterval: null,
+    kisWrongAttempts: 0,
+    kisTaskLimitSec: 300,
 };
 
 // DOM Elements
@@ -31,6 +39,7 @@ const timeDisplay = document.getElementById("timeDisplay");
 const currentShotBadge = document.getElementById("currentShotBadge");
 const shotTimeline = document.getElementById("shotTimeline");
 const timelineCursor = document.getElementById("timelineCursor");
+const timelineRangeOverlay = document.getElementById("timelineRangeOverlay");
 const timelineHoverTime = document.getElementById("timelineHoverTime");
 const timelineTooltip = document.getElementById("timelineTooltip");
 const shotList = document.getElementById("shotList");
@@ -41,6 +50,52 @@ const btnPrevShot = document.getElementById("btnPrevShot");
 const btnNextShot = document.getElementById("btnNextShot");
 const btnJumpCenter = document.getElementById("btnJumpCenter");
 
+// Task 06B Scrubber & KIS Console DOM Elements
+const btnStepBack5s = document.getElementById("btnStepBack5s");
+const btnStepBack1s = document.getElementById("btnStepBack1s");
+const btnStepBackFrame = document.getElementById("btnStepBackFrame");
+const btnTogglePlay = document.getElementById("btnTogglePlay");
+const btnStepFwdFrame = document.getElementById("btnStepFwdFrame");
+const btnStepFwd1s = document.getElementById("btnStepFwd1s");
+const btnStepFwd5s = document.getElementById("btnStepFwd5s");
+
+const kisTargetLabel = document.getElementById("kisTargetLabel");
+const kisMarkInInput = document.getElementById("kisMarkInInput");
+const kisMarkOutInput = document.getElementById("kisMarkOutInput");
+const btnMarkIn = document.getElementById("btnMarkIn");
+const btnMarkOut = document.getElementById("btnMarkOut");
+const btnPresetShot = document.getElementById("btnPresetShot");
+const btnPresetTight = document.getElementById("btnPresetTight");
+const btnPresetWindow = document.getElementById("btnPresetWindow");
+const btnPlayRange = document.getElementById("btnPlayRange");
+const btnQuickSubmitPlayhead = document.getElementById("btnQuickSubmitPlayhead");
+const btnSubmitRange = document.getElementById("btnSubmitRange");
+const kisSubmitToast = document.getElementById("kisSubmitToast");
+
+const btnToggleFilmstrip = document.getElementById("btnToggleFilmstrip");
+const playerFilmstripDrawer = document.getElementById("playerFilmstripDrawer");
+const playerFilmstripList = document.getElementById("playerFilmstripList");
+const btnRefreshFilmstrip = document.getElementById("btnRefreshFilmstrip");
+
+const btnToggleDresConfig = document.getElementById("btnToggleDresConfig");
+const kisDresConfigDrawer = document.getElementById("kisDresConfigDrawer");
+const chkDresDryRun = document.getElementById("chkDresDryRun");
+const inputDresUrl = document.getElementById("inputDresUrl");
+const inputDresEvalId = document.getElementById("inputDresEvalId");
+const inputDresSession = document.getElementById("inputDresSession");
+const btnSaveDresConfig = document.getElementById("btnSaveDresConfig");
+const btnClearDresCache = document.getElementById("btnClearDresCache");
+const dresHistoryList = document.getElementById("dresHistoryList");
+
+const kisTaskTypeSelect = document.getElementById("kisTaskTypeSelect");
+const kisTimerDisplay = document.getElementById("kisTimerDisplay");
+const btnTimerToggle = document.getElementById("btnTimerToggle");
+const btnTimerReset = document.getElementById("btnTimerReset");
+const kisWrongCount = document.getElementById("kisWrongCount");
+const btnAddWrong = document.getElementById("btnAddWrong");
+const btnSubWrong = document.getElementById("btnSubWrong");
+const kisEstScoreBadge = document.getElementById("kisEstScoreBadge");
+
 // Search & Multimodal DOM Elements
 const searchForm = document.getElementById("searchForm");
 const queryInput = document.getElementById("queryInput");
@@ -50,6 +105,7 @@ const btnModeMultimodal = document.getElementById("btnModeMultimodal");
 const btnModeVisual = document.getElementById("btnModeVisual");
 const btnModeOcr = document.getElementById("btnModeOcr");
 const btnAddVisualCue = document.getElementById("btnAddVisualCue");
+const btnAddNegVisualCue = document.getElementById("btnAddNegVisualCue");
 const btnAddOcrCue = document.getElementById("btnAddOcrCue");
 const btnAddSeqStage = document.getElementById("btnAddSeqStage");
 const btnClearPills = document.getElementById("btnClearPills");
@@ -153,6 +209,13 @@ async function loadVideo(videoId) {
         renderTimeline();
         renderShotCards();
 
+        // Initialize default KIS range to first shot or [0.0, 5.0]
+        if (state.shots && state.shots.length > 0) {
+            setKisRange(state.shots[0].start_sec, state.shots[0].end_sec);
+        } else {
+            setKisRange(0.0, Math.min(5.0, state.totalDuration || 5.0));
+        }
+
     } catch (err) {
         console.error("Error loading video details:", err);
         shotList.innerHTML = `<div class="loading-state">Error loading details: ${err.message}</div>`;
@@ -163,8 +226,9 @@ async function loadVideo(videoId) {
  * Renders the proportional shot segments on the timeline.
  */
 function renderTimeline() {
-    // Preserve the cursor element
+    // Preserve range overlay and cursor elements
     shotTimeline.innerHTML = "";
+    if (timelineRangeOverlay) shotTimeline.appendChild(timelineRangeOverlay);
     shotTimeline.appendChild(timelineCursor);
 
     if (state.totalDuration <= 0 || state.shots.length === 0) return;
@@ -187,9 +251,10 @@ function renderTimeline() {
             segment.classList.add("long");
         }
 
-        // Click to seek
+        // Click to seek and set shot bounds
         segment.addEventListener("click", () => {
             seekVideoTo(shot.start_sec);
+            setKisRange(shot.start_sec, shot.end_sec);
         });
 
         // Hover Tooltip
@@ -202,6 +267,8 @@ function renderTimeline() {
 
         shotTimeline.appendChild(segment);
     });
+
+    renderTimelineRangeOverlay();
 }
 
 /**
@@ -337,6 +404,14 @@ function seekVideoTo(seconds) {
 function onVideoTimeUpdate() {
     const curTime = videoPlayer.currentTime;
     const dur = state.totalDuration || videoPlayer.duration || 1;
+
+    // Auto-pause if playing selected KIS range and reached Mark Out
+    if (state.isPlayingRange && curTime >= state.markOutSec) {
+        videoPlayer.pause();
+        videoPlayer.currentTime = state.markOutSec;
+        state.isPlayingRange = false;
+        if (btnPlayRange) btnPlayRange.textContent = "[Play Range]";
+    }
 
     // 1. Update text display
     timeDisplay.textContent = `${formatTime(curTime)} / ${formatTime(dur)}`;
@@ -681,14 +756,19 @@ function renderPipelineTraceCueBody() {
 }
 
 /**
- * Helper: Seeks video player to moment and switches video if needed.
+ * Helper: Seeks video player to moment, switches video if needed, and updates KIS range.
  */
-async function seekToVideoMoment(videoId, timestampSec) {
+async function seekToVideoMoment(videoId, timestampSec, endSec = null) {
     if (videoId && videoId !== state.currentVideoId) {
         videoSelect.value = videoId;
         await loadVideo(videoId);
     }
     seekVideoTo(timestampSec);
+    if (endSec !== null && endSec >= timestampSec) {
+        setKisRange(timestampSec, endSec);
+    } else {
+        setKisRange(Math.max(0, timestampSec - 0.5), timestampSec + 0.5);
+    }
 }
 
 /**
@@ -699,6 +779,73 @@ function toggleEvidenceBox(rank) {
     if (box) {
         const isHidden = box.style.display === "none";
         box.style.display = isHidden ? "grid" : "none";
+    }
+}
+
+/**
+ * Helper: Toggles and fetches +-15s Temporal Context Filmstrip for a candidate card.
+ */
+async function toggleCandidateFilmstrip(rank, videoId, centerSec) {
+    const box = document.getElementById(`filmstrip-box-${rank}`);
+    if (!box) return;
+
+    const isHidden = box.style.display === "none";
+    if (!isHidden) {
+        box.style.display = "none";
+        return;
+    }
+
+    box.style.display = "block";
+    box.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); padding: 6px;">Loading +-15s neighbor keyframes for ${videoId}...</div>`;
+
+    try {
+        const res = await fetch(`/api/videos/${encodeURIComponent(videoId)}/context?timestamp_sec=${centerSec}&window_sec=15.0`);
+        if (!res.ok) throw new Error("Failed to load temporal context");
+        const data = await res.json();
+        const frames = data.frames || [];
+        if (frames.length === 0) {
+            box.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); padding: 6px;">No neighbor keyframes found.</div>`;
+            return;
+        }
+
+        let html = `<div class="filmstrip-strip">`;
+        frames.forEach(f => {
+            const isCenter = Math.abs(f.delta_sec) < 0.8;
+            const deltaStr = f.delta_sec >= 0 ? `+${f.delta_sec.toFixed(1)}s` : `${f.delta_sec.toFixed(1)}s`;
+            const ocrTag = (f.ocr_texts && f.ocr_texts.length > 0) ? `<div class="trace-hit-text" title="${f.ocr_texts.join(' ')}">${f.ocr_texts[0]}</div>` : "";
+            html += `
+                <div class="filmstrip-item ${isCenter ? 'center-hit' : ''}" onclick="event.stopPropagation(); seekToVideoMoment('${videoId}', ${f.timestamp_sec});">
+                    <img src="${f.image_url}" class="filmstrip-thumb" loading="lazy" alt="${f.keyframe_id}">
+                    <div class="filmstrip-meta">
+                        <span class="filmstrip-time">${f.timestamp_sec.toFixed(1)}s</span>
+                        <span class="filmstrip-delta">(${deltaStr})</span>
+                    </div>
+                    ${ocrTag}
+                </div>
+            `;
+        });
+        html += `</div>`;
+        box.innerHTML = html;
+    } catch (err) {
+        box.innerHTML = `<div style="font-size: 11px; color: #f87171; padding: 6px;">Error: ${err.message}</div>`;
+    }
+}
+
+/**
+ * Helper: Filters search scope directly to a specific video ID and re-runs search.
+ */
+function filterSearchToVideo(videoId) {
+    if (!videoId) return;
+    if (videoId !== state.currentVideoId) {
+        videoSelect.value = videoId;
+        loadVideo(videoId);
+    }
+    const chk = document.getElementById("chkCurrentVideoOnly");
+    if (chk) {
+        chk.checked = true;
+    }
+    if (queryInput.value.trim()) {
+        executeSearch();
     }
 }
 
@@ -717,6 +864,7 @@ async function sendRelevanceFeedback(keyframeId, isPositive) {
     }
 
     try {
+        const scopeCurrent = document.getElementById("chkCurrentVideoOnly")?.checked;
         const res = await fetch("/api/search/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -725,7 +873,7 @@ async function sendRelevanceFeedback(keyframeId, isPositive) {
                 negative_keyframe_ids: Array.from(state.feedbackNegatives),
                 original_query: queryInput.value.trim(),
                 top_k: 25,
-                video_id: state.currentVideoId
+                video_id: scopeCurrent ? state.currentVideoId : null
             })
         });
 
@@ -771,7 +919,7 @@ function renderCandidateCards() {
         }
 
         const isConsensus = (c.matched_cues && c.matched_cues.length > 1);
-        const consensusBadge = isConsensus ? `<span class="candidate-consensus-badge">&#10024; Consensus (${c.matched_cues.length} Cues)</span>` : "";
+        const consensusBadge = isConsensus ? `<span class="candidate-consensus-badge">[Consensus: ${c.matched_cues.length} Cues]</span>` : "";
 
         let cuesBadgeHtml = "";
         if (c.matched_cues && c.matched_cues.length > 0) {
@@ -797,7 +945,7 @@ function renderCandidateCards() {
         if (evidenceEntries.length > 0) {
             evidenceToggleBtn = `
                 <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); toggleEvidenceBox(${c.rank});">
-                    &#9660; Inspect Trigger Keyframes (${evidenceEntries.length})
+                    [v] Trigger Keyframes (${evidenceEntries.length})
                 </button>
             `;
 
@@ -818,6 +966,8 @@ function renderCandidateCards() {
             evidenceBoxHtml += `</div>`;
         }
 
+        const centerSec = ((Number(c.start_sec) + Number(c.end_sec)) / 2.0).toFixed(2);
+
         card.innerHTML = `
             <div class="candidate-thumb-box">
                 <span class="candidate-rank-pill ${rankClass}">#${c.rank}</span>
@@ -836,19 +986,31 @@ function renderCandidateCards() {
                     <div style="display: flex; gap: 4px;">${cuesBadgeHtml}</div>
                 </div>
                 ${snippetHtml}
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-                    ${evidenceToggleBtn}
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                    <div style="display: flex; gap: 4px; align-items: center;">
+                        ${evidenceToggleBtn}
+                        <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); toggleCandidateFilmstrip(${c.rank}, '${c.video_id}', ${centerSec});" title="Inspect +-15s neighbor keyframes without loading video">
+                            [Filmstrip +-15s]
+                        </button>
+                        <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); filterSearchToVideo('${c.video_id}');" title="Restrict search to this video">
+                            [Only ${c.video_id}]
+                        </button>
+                    </div>
                     <div class="candidate-feedback-actions" onclick="event.stopPropagation();">
-                        <button type="button" class="btn-feedback positive" onclick="sendRelevanceFeedback('${c.keyframe_id}', true)" title="Find similar moments with Rocchio">&#128077; Similar</button>
-                        <button type="button" class="btn-feedback negative" onclick="sendRelevanceFeedback('${c.keyframe_id}', false)" title="Suppress similar moments with Rocchio">&#128078; Exclude</button>
+                        <button type="button" class="btn-feedback positive" onclick="sendRelevanceFeedback('${c.keyframe_id}', true)" title="Find visually similar frames with Rocchio">[+ Similar]</button>
+                        <button type="button" class="btn-feedback negative" onclick="sendRelevanceFeedback('${c.keyframe_id}', false)" title="Suppress similar frames with Rocchio">[- Exclude]</button>
+                        <button type="button" class="btn-card-quick-submit" onclick="submitKisMoment('${c.video_id}', ${Number(c.start_sec)}, ${Number(c.end_sec)});" title="Immediately submit this candidate interval to DRES">
+                            [Submit KIS]
+                        </button>
                     </div>
                 </div>
                 ${evidenceBoxHtml}
+                <div class="candidate-filmstrip-box" id="filmstrip-box-${c.rank}" style="display: none;" onclick="event.stopPropagation();"></div>
             </div>
         `;
 
         card.addEventListener("click", () => {
-            seekToVideoMoment(c.video_id, c.start_sec);
+            seekToVideoMoment(c.video_id, c.start_sec, c.end_sec);
             highlightCandidateCard(c.rank);
         });
 
@@ -881,6 +1043,261 @@ function clearVisualSearch() {
     tabResultCount.textContent = "0";
     if (pipelineTracePanel) pipelineTracePanel.style.display = "none";
     switchTab("shots");
+}
+
+// =========================================================================
+// Task 06B: KIS Interactive Scrubber, Range Controls & DRES Live Submission
+// =========================================================================
+
+/**
+ * Steps video player relative to current playhead by deltaSec.
+ */
+function stepVideoBy(deltaSec) {
+    if (!videoPlayer) return;
+    const dur = state.totalDuration || videoPlayer.duration || 3600;
+    const target = Math.max(0.0, Math.min(dur, (videoPlayer.currentTime || 0.0) + deltaSec));
+    videoPlayer.pause();
+    state.isPlayingRange = false;
+    videoPlayer.currentTime = target;
+}
+
+/**
+ * Toggles video playback play/pause.
+ */
+function toggleVideoPlayPause() {
+    if (!videoPlayer) return;
+    if (videoPlayer.paused) {
+        videoPlayer.play();
+    } else {
+        videoPlayer.pause();
+        state.isPlayingRange = false;
+    }
+}
+
+/**
+ * Sets KIS Mark In and Mark Out boundaries and updates UI.
+ */
+function setKisRange(startSec, endSec) {
+    const dur = state.totalDuration || videoPlayer.duration || 3600;
+    const s = Math.max(0.0, Math.min(dur, Number(startSec) || 0.0));
+    const e = Math.max(s, Math.min(dur, Number(endSec) || s));
+    state.markInSec = Number(s.toFixed(2));
+    state.markOutSec = Number(e.toFixed(2));
+
+    if (kisMarkInInput) kisMarkInInput.value = state.markInSec.toFixed(2);
+    if (kisMarkOutInput) kisMarkOutInput.value = state.markOutSec.toFixed(2);
+    updateKisRangeDisplay();
+    renderTimelineRangeOverlay();
+}
+
+/**
+ * Updates KIS target header label with millisecond bounds.
+ */
+function updateKisRangeDisplay() {
+    if (!kisTargetLabel) return;
+    const vid = state.currentVideoId || "--";
+    const sMs = Math.round(state.markInSec * 1000);
+    const eMs = Math.round(state.markOutSec * 1000);
+    const dur = Math.max(0.0, state.markOutSec - state.markInSec).toFixed(2);
+    kisTargetLabel.textContent = `Target: ${vid} | Range: ${sMs}ms - ${eMs}ms (${dur}s)`;
+}
+
+/**
+ * Renders the visual range highlight overlay on the shot timeline.
+ */
+function renderTimelineRangeOverlay() {
+    if (!timelineRangeOverlay) return;
+    const dur = state.totalDuration || videoPlayer.duration || 0;
+    if (dur <= 0 || state.markOutSec < state.markInSec) {
+        timelineRangeOverlay.style.display = "none";
+        return;
+    }
+    const leftPct = Math.max(0, Math.min(100, (state.markInSec / dur) * 100));
+    const widthPct = Math.max(0.4, Math.min(100 - leftPct, ((state.markOutSec - state.markInSec) / dur) * 100));
+    timelineRangeOverlay.style.display = "block";
+    timelineRangeOverlay.style.left = `${leftPct}%`;
+    timelineRangeOverlay.style.width = `${widthPct}%`;
+}
+
+/**
+ * Plays exclusively within [markInSec, markOutSec] and auto-pauses at markOutSec.
+ */
+function playSelectedKisRange() {
+    if (!videoPlayer) return;
+    if (state.markOutSec <= state.markInSec) {
+        showKisToast("[WARNING] Mark Out must be greater than Mark In to preview range.", "warn");
+        return;
+    }
+    state.isPlayingRange = true;
+    videoPlayer.currentTime = state.markInSec;
+    videoPlayer.play();
+    if (btnPlayRange) btnPlayRange.textContent = "[Playing...]";
+}
+
+/**
+ * Loads +-15s neighbor keyframes around current playhead into Player Filmstrip Drawer.
+ */
+async function loadPlayerFilmstrip() {
+    if (!playerFilmstripList || !state.currentVideoId) return;
+    const centerSec = Number((videoPlayer.currentTime || 0.0).toFixed(2));
+    const titleEl = document.getElementById("playerFilmstripTitle");
+    if (titleEl) {
+        titleEl.textContent = `Temporal Context Filmstrip for ${state.currentVideoId} @ ${centerSec}s (+-15s)`;
+    }
+    playerFilmstripList.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); padding: 6px;">Loading neighbor frames...</div>`;
+
+    try {
+        const res = await fetch(`/api/videos/${encodeURIComponent(state.currentVideoId)}/context?timestamp_sec=${centerSec}&window_sec=15.0`);
+        if (!res.ok) throw new Error("Failed to load filmstrip");
+        const data = await res.json();
+        const frames = data.frames || [];
+        if (frames.length === 0) {
+            playerFilmstripList.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); padding: 6px;">No neighbor keyframes found.</div>`;
+            return;
+        }
+
+        let html = "";
+        frames.forEach(f => {
+            const isCenter = Math.abs(f.delta_sec) < 0.8;
+            const deltaStr = f.delta_sec >= 0 ? `+${f.delta_sec.toFixed(1)}s` : `${f.delta_sec.toFixed(1)}s`;
+            const ocrTag = (f.ocr_texts && f.ocr_texts.length > 0) ? `<div class="trace-hit-text" title="${f.ocr_texts.join(' ')}">${f.ocr_texts[0]}</div>` : "";
+            html += `
+                <div class="filmstrip-item ${isCenter ? 'center-hit' : ''}" onclick="seekVideoTo(${f.timestamp_sec}); setKisRange(${Math.max(0, f.timestamp_sec - 0.5)}, ${f.timestamp_sec + 0.5});">
+                    <img src="${f.image_url}" class="filmstrip-thumb" loading="lazy" alt="${f.keyframe_id}">
+                    <div class="filmstrip-meta">
+                        <span class="filmstrip-time">${f.timestamp_sec.toFixed(1)}s</span>
+                        <span class="filmstrip-delta">(${deltaStr})</span>
+                    </div>
+                    ${ocrTag}
+                </div>
+            `;
+        });
+        playerFilmstripList.innerHTML = html;
+    } catch (err) {
+        playerFilmstripList.innerHTML = `<div style="font-size: 11px; color: #f87171; padding: 6px;">Error: ${err.message}</div>`;
+    }
+}
+
+/**
+ * Displays a status banner inside KIS Console.
+ */
+function showKisToast(message, level = "ok") {
+    if (!kisSubmitToast) return;
+    kisSubmitToast.style.display = "block";
+    kisSubmitToast.className = `kis-submit-toast ${level}`;
+    kisSubmitToast.textContent = message;
+}
+
+/**
+ * Submits a KIS interval [startSec, endSec] for videoId to backend DRES endpoint.
+ */
+async function submitKisMoment(videoId, startSec, endSec) {
+    if (!videoId) {
+        showKisToast("[ERROR] No active video selected for submission.", "err");
+        return;
+    }
+    if (endSec < startSec) {
+        showKisToast(`[ERROR] Invalid interval: End (${endSec}s) < Start (${startSec}s).`, "err");
+        return;
+    }
+
+    const dryRun = chkDresDryRun ? chkDresDryRun.checked : true;
+    const evalId = inputDresEvalId ? inputDresEvalId.value.trim() : "offline_kis_eval";
+
+    try {
+        const res = await fetch("/api/dres/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                video_id: videoId,
+                start_sec: startSec,
+                end_sec: endSec,
+                evaluation_id: evalId,
+                dry_run: dryRun
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            showKisToast(`[ERROR] Submission rejected: ${data.detail || "Server error"}`, "err");
+            return;
+        }
+
+        if (data.status === "DUPLICATE_PREVENTED") {
+            showKisToast(data.message, "warn");
+        } else {
+            const est = computeCurrentKisScore();
+            showKisToast(`${data.message} | Est. Score: ${est.toFixed(1)} pts`, "ok");
+        }
+
+        refreshDresStatus();
+    } catch (err) {
+        showKisToast(`[ERROR] Network error submitting to DRES: ${err.message}`, "err");
+    }
+}
+
+/**
+ * 1-Click Quick Submit at current video playhead [currentTime - 0.5s, currentTime + 0.5s].
+ */
+function quickSubmitAtPlayhead() {
+    if (!state.currentVideoId) return;
+    const cur = videoPlayer ? (videoPlayer.currentTime || 0.0) : 0.0;
+    const dur = state.totalDuration || videoPlayer.duration || 3600;
+    const s = Number(Math.max(0.0, cur - 0.5).toFixed(2));
+    const e = Number(Math.min(dur, cur + 0.5).toFixed(2));
+    setKisRange(s, e);
+    submitKisMoment(state.currentVideoId, s, e);
+}
+
+/**
+ * Refreshes DRES session status and submission history log.
+ */
+async function refreshDresStatus() {
+    if (!dresHistoryList) return;
+    try {
+        const res = await fetch("/api/dres/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        const hist = data.history || [];
+        if (hist.length === 0) {
+            dresHistoryList.textContent = "No submissions yet.";
+            return;
+        }
+        dresHistoryList.innerHTML = hist.map((h, i) =>
+            `<div class="dres-hist-item">#${hist.length - i} [${h.mode}] <strong>${h.video_id}</strong>: ${h.start_ms}ms - ${h.end_ms}ms (${h.status})</div>`
+        ).join("");
+    } catch (err) {
+        console.error("Failed to load DRES status:", err);
+    }
+}
+
+/**
+ * Computes real-time KIS competition score based on elapsed stopwatch and wrong attempts.
+ */
+function computeCurrentKisScore() {
+    const tL = state.kisTaskLimitSec || 300;
+    const t = Math.min(state.kisElapsedSec, tL);
+    const sAcc = Math.max(0.0, 50.0 - 10.0 * state.kisWrongAttempts);
+    const sTime = 50.0 * (1.0 - t / tL);
+    return Math.max(0.0, sAcc + sTime);
+}
+
+/**
+ * Updates the stopwatch and estimated KIS score badge.
+ */
+function updateKisScoreWidget() {
+    if (kisTimerDisplay) {
+        const mins = String(Math.floor(state.kisElapsedSec / 60)).padStart(2, "0");
+        const secs = String(state.kisElapsedSec % 60).padStart(2, "0");
+        kisTimerDisplay.textContent = `${mins}:${secs}`;
+    }
+    if (kisWrongCount) {
+        kisWrongCount.textContent = String(state.kisWrongAttempts);
+    }
+    if (kisEstScoreBadge) {
+        const total = computeCurrentKisScore();
+        kisEstScoreBadge.textContent = `Est: ${total.toFixed(1)} pts`;
+    }
 }
 
 /**
@@ -918,6 +1335,208 @@ function setupEventListeners() {
     btnNextShot.addEventListener("click", jumpNextShot);
     btnJumpCenter.addEventListener("click", jumpCurrentCenter);
 
+    // Task 06B Fine Stepper Controls
+    if (btnStepBack5s) btnStepBack5s.addEventListener("click", () => stepVideoBy(-5.0));
+    if (btnStepBack1s) btnStepBack1s.addEventListener("click", () => stepVideoBy(-1.0));
+    if (btnStepBackFrame) btnStepBackFrame.addEventListener("click", () => stepVideoBy(-0.04));
+    if (btnTogglePlay) btnTogglePlay.addEventListener("click", toggleVideoPlayPause);
+    if (btnStepFwdFrame) btnStepFwdFrame.addEventListener("click", () => stepVideoBy(0.04));
+    if (btnStepFwd1s) btnStepFwd1s.addEventListener("click", () => stepVideoBy(1.0));
+    if (btnStepFwd5s) btnStepFwd5s.addEventListener("click", () => stepVideoBy(5.0));
+
+    // Task 06B Mark In / Out & Presets
+    if (btnMarkIn) {
+        btnMarkIn.addEventListener("click", () => {
+            const cur = videoPlayer.currentTime || 0.0;
+            const out = Math.max(cur, state.markOutSec);
+            setKisRange(cur, out);
+        });
+    }
+    if (btnMarkOut) {
+        btnMarkOut.addEventListener("click", () => {
+            const cur = videoPlayer.currentTime || 0.0;
+            const inn = Math.min(cur, state.markInSec);
+            setKisRange(inn, cur);
+        });
+    }
+    if (kisMarkInInput) {
+        kisMarkInInput.addEventListener("change", () => {
+            setKisRange(parseFloat(kisMarkInInput.value) || 0.0, state.markOutSec);
+        });
+    }
+    if (kisMarkOutInput) {
+        kisMarkOutInput.addEventListener("change", () => {
+            setKisRange(state.markInSec, parseFloat(kisMarkOutInput.value) || state.markInSec);
+        });
+    }
+    if (btnPresetShot) {
+        btnPresetShot.addEventListener("click", () => {
+            const cur = videoPlayer.currentTime || 0.0;
+            const activeShot = state.shots.find(s => s.start_sec <= cur && cur <= s.end_sec) || state.shots[0];
+            if (activeShot) {
+                setKisRange(activeShot.start_sec, activeShot.end_sec);
+            }
+        });
+    }
+    if (btnPresetTight) {
+        btnPresetTight.addEventListener("click", () => {
+            const cur = videoPlayer.currentTime || 0.0;
+            setKisRange(Math.max(0.0, cur - 0.5), cur + 0.5);
+        });
+    }
+    if (btnPresetWindow) {
+        btnPresetWindow.addEventListener("click", () => {
+            const cur = videoPlayer.currentTime || 0.0;
+            setKisRange(Math.max(0.0, cur - 2.5), cur + 2.5);
+        });
+    }
+    if (btnPlayRange) {
+        btnPlayRange.addEventListener("click", playSelectedKisRange);
+    }
+
+    // Task 06B Submission Buttons
+    if (btnQuickSubmitPlayhead) {
+        btnQuickSubmitPlayhead.addEventListener("click", quickSubmitAtPlayhead);
+    }
+    if (btnSubmitRange) {
+        btnSubmitRange.addEventListener("click", () => {
+            submitKisMoment(state.currentVideoId, state.markInSec, state.markOutSec);
+        });
+    }
+
+    // Task 06B Player Filmstrip Drawer
+    if (btnToggleFilmstrip && playerFilmstripDrawer) {
+        btnToggleFilmstrip.addEventListener("click", () => {
+            const isHidden = playerFilmstripDrawer.style.display === "none";
+            playerFilmstripDrawer.style.display = isHidden ? "block" : "none";
+            if (isHidden) loadPlayerFilmstrip();
+        });
+    }
+    if (btnRefreshFilmstrip) {
+        btnRefreshFilmstrip.addEventListener("click", loadPlayerFilmstrip);
+    }
+
+    // Task 06B DRES Config & History Drawer
+    if (btnToggleDresConfig && kisDresConfigDrawer) {
+        btnToggleDresConfig.addEventListener("click", () => {
+            const isHidden = kisDresConfigDrawer.style.display === "none";
+            kisDresConfigDrawer.style.display = isHidden ? "block" : "none";
+            if (isHidden) refreshDresStatus();
+        });
+    }
+    if (btnSaveDresConfig) {
+        btnSaveDresConfig.addEventListener("click", async () => {
+            try {
+                const res = await fetch("/api/dres/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        base_url: inputDresUrl?.value || "",
+                        evaluation_id: inputDresEvalId?.value || "",
+                        session_id: inputDresSession?.value || ""
+                    })
+                });
+                if (res.ok) {
+                    showKisToast("[OK] Saved DRES configuration.", "ok");
+                    refreshDresStatus();
+                }
+            } catch (err) {
+                showKisToast(`[ERROR] Failed to save DRES config: ${err.message}`, "err");
+            }
+        });
+    }
+    if (btnClearDresCache) {
+        btnClearDresCache.addEventListener("click", async () => {
+            await fetch("/api/dres/clear-cache", { method: "POST" });
+            showKisToast("[OK] Cleared duplicate submission cache for new query.", "ok");
+            refreshDresStatus();
+        });
+    }
+
+    // Task 06B Competition Stopwatch & Score Simulator
+    if (kisTaskTypeSelect) {
+        kisTaskTypeSelect.addEventListener("change", () => {
+            state.kisTaskLimitSec = parseInt(kisTaskTypeSelect.value, 10) || 300;
+            updateKisScoreWidget();
+        });
+    }
+    if (btnTimerToggle) {
+        btnTimerToggle.addEventListener("click", () => {
+            if (state.kisTimerRunning) {
+                clearInterval(state.kisTimerInterval);
+                state.kisTimerRunning = false;
+                btnTimerToggle.textContent = "[Start]";
+            } else {
+                state.kisTimerRunning = true;
+                btnTimerToggle.textContent = "[Pause]";
+                state.kisTimerInterval = setInterval(() => {
+                    state.kisElapsedSec += 1;
+                    updateKisScoreWidget();
+                }, 1000);
+            }
+        });
+    }
+    if (btnTimerReset) {
+        btnTimerReset.addEventListener("click", async () => {
+            if (state.kisTimerInterval) clearInterval(state.kisTimerInterval);
+            state.kisTimerRunning = false;
+            state.kisElapsedSec = 0;
+            state.kisWrongAttempts = 0;
+            if (btnTimerToggle) btnTimerToggle.textContent = "[Start]";
+            updateKisScoreWidget();
+            await fetch("/api/dres/clear-cache", { method: "POST" });
+            showKisToast("[OK] Reset timer and cleared duplicate cache for new query.", "ok");
+            refreshDresStatus();
+        });
+    }
+    if (btnAddWrong) {
+        btnAddWrong.addEventListener("click", () => {
+            state.kisWrongAttempts += 1;
+            updateKisScoreWidget();
+        });
+    }
+    if (btnSubWrong) {
+        btnSubWrong.addEventListener("click", () => {
+            state.kisWrongAttempts = Math.max(0, state.kisWrongAttempts - 1);
+            updateKisScoreWidget();
+        });
+    }
+
+    // Global Keyboard Hotkeys (J, L, ArrowLeft, ArrowRight, Space, I, O, S)
+    document.addEventListener("keydown", (e) => {
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+        const key = e.key.toLowerCase();
+        if (key === "j") {
+            e.preventDefault();
+            stepVideoBy(-1.0);
+        } else if (key === "l") {
+            e.preventDefault();
+            stepVideoBy(1.0);
+        } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            stepVideoBy(-0.04);
+        } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            stepVideoBy(0.04);
+        } else if (e.key === " ") {
+            e.preventDefault();
+            toggleVideoPlayPause();
+        } else if (key === "i") {
+            e.preventDefault();
+            const cur = videoPlayer.currentTime || 0.0;
+            setKisRange(cur, Math.max(cur, state.markOutSec));
+        } else if (key === "o") {
+            e.preventDefault();
+            const cur = videoPlayer.currentTime || 0.0;
+            setKisRange(Math.min(cur, state.markInSec), cur);
+        } else if (key === "s" && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            quickSubmitAtPlayhead();
+        }
+    });
+
     // Modality toggle handlers
     if (btnModeMultimodal) {
         btnModeMultimodal.addEventListener("click", () => {
@@ -925,7 +1544,7 @@ function setupEventListeners() {
             btnModeMultimodal.classList.add("active");
             if (btnModeVisual) btnModeVisual.classList.remove("active");
             if (btnModeOcr) btnModeOcr.classList.remove("active");
-            queryInput.placeholder = "Enter multi-cue query (e.g. 'v: news anchor | ocr: thoi su' or 'blue truck')...";
+            queryInput.placeholder = "Enter multi-cue query (e.g. 'v: news anchor | -v: studio | ocr: thoi su')...";
             queryInput.focus();
         });
     }
@@ -936,7 +1555,7 @@ function setupEventListeners() {
             btnModeVisual.classList.add("active");
             if (btnModeMultimodal) btnModeMultimodal.classList.remove("active");
             if (btnModeOcr) btnModeOcr.classList.remove("active");
-            queryInput.placeholder = "Search visual scenes (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...";
+            queryInput.placeholder = "Search visual scenes in English (e.g. 'close up of food dish', 'blue truck')...";
             queryInput.focus();
         });
     }
@@ -947,7 +1566,7 @@ function setupEventListeners() {
             btnModeOcr.classList.add("active");
             if (btnModeMultimodal) btnModeMultimodal.classList.remove("active");
             if (btnModeVisual) btnModeVisual.classList.remove("active");
-            queryInput.placeholder = "Search on-screen text (e.g. 'hồ tiêu', 'tây nguyên', 'HTV', 'giá')...";
+            queryInput.placeholder = "Search on-screen text (e.g. 'trùng biển số', 'tây nguyên', 'HTV')...";
             queryInput.focus();
         });
     }
@@ -957,6 +1576,15 @@ function setupEventListeners() {
         btnAddVisualCue.addEventListener("click", () => {
             const cur = queryInput.value.trim();
             queryInput.value = cur ? `${cur} | v: ` : "v: ";
+            queryInput.focus();
+            btnClearQuery.style.display = "block";
+        });
+    }
+
+    if (btnAddNegVisualCue) {
+        btnAddNegVisualCue.addEventListener("click", () => {
+            const cur = queryInput.value.trim();
+            queryInput.value = cur ? `${cur} | -v: ` : "-v: ";
             queryInput.focus();
             btnClearQuery.style.display = "block";
         });
@@ -995,7 +1623,7 @@ function setupEventListeners() {
         btnToggleTrace.addEventListener("click", () => {
             const isHidden = traceContent.style.display === "none";
             traceContent.style.display = isHidden ? "flex" : "none";
-            btnToggleTrace.innerHTML = isHidden ? "&#9650; Hide Trace Details" : "&#9660; Inspect Per-Cue Hits &amp; Fusion";
+            btnToggleTrace.innerHTML = isHidden ? "[^] Hide Trace Details" : "[v] Inspect Per-Cue Hits &amp; Fusion";
         });
     }
 

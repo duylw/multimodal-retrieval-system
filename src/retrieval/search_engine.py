@@ -142,13 +142,19 @@ class SearchEngine:
         for s_idx, stage in enumerate(parsed.stages):
             hits_by_cue: Dict[str, List[Dict[str, Any]]] = {}
 
-            # 1. Execute Visual Cues
+            # 1. Execute Visual Cues (with optional Negative Visual Subtraction)
+            neg_cues = getattr(stage, "negative_visual_queries", [])
             for v_idx, v_cue in enumerate(stage.visual_queries):
                 cue_id = f"s{s_idx}_v{v_idx}"
                 cue_types[cue_id] = "visual"
 
                 t0 = time.perf_counter()
-                hits = self._search_visual_cue(v_cue, top_k=self.top_k_visual, video_id=video_id)
+                hits = self._search_visual_cue(
+                    v_cue,
+                    top_k=self.top_k_visual,
+                    video_id=video_id,
+                    negative_cues=neg_cues
+                )
                 lat_ms = round((time.perf_counter() - t0) * 1000, 2)
                 hits_by_cue[cue_id] = hits
 
@@ -240,7 +246,8 @@ class SearchEngine:
                 {
                     "stage_index": idx,
                     "visual_queries": st.visual_queries,
-                    "ocr_queries": st.ocr_queries
+                    "ocr_queries": st.ocr_queries,
+                    "negative_visual_queries": getattr(st, "negative_visual_queries", [])
                 }
                 for idx, st in enumerate(parsed.stages)
             ],
@@ -272,7 +279,11 @@ class SearchEngine:
                 v_all = list(st.visual_queries)
                 if not v_all and st.ocr_queries:
                     v_all = list(st.ocr_queries)
-                new_stages.append(QueryStage(visual_queries=v_all, ocr_queries=[]))
+                new_stages.append(QueryStage(
+                    visual_queries=v_all,
+                    ocr_queries=[],
+                    negative_visual_queries=list(getattr(st, "negative_visual_queries", []))
+                ))
             parsed.stages = new_stages
 
         elif mode_lower == "ocr":
@@ -291,9 +302,15 @@ class SearchEngine:
         self,
         visual_cue: str,
         top_k: int = 1500,
-        video_id: Optional[str] = None
+        video_id: Optional[str] = None,
+        negative_cues: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Encodes English visual description and searches FAISS index."""
+        """
+        Encodes English visual description (with optional negative cue vector subtraction)
+        and searches FAISS index without single-video filter starvation.
+        """
+        import numpy as np
+
         clean_cue = visual_cue.strip()
         if not clean_cue:
             return []
@@ -302,13 +319,53 @@ class SearchEngine:
         extractor = self._ensure_visual_extractor()
 
         # Extract 768-dim L2-normalized text embedding
-        q_vec = extractor.extract_text_embedding(clean_cue)
-        raw_hits = vec_idx.search(q_vec, top_k=top_k)
+        q_vec = extractor.extract_text_embedding(clean_cue).astype(np.float32)
 
-        # Filter by video_id if provided
+        # Apply Negative Visual Subtraction (-v:) if negative cues are present
+        if negative_cues:
+            neg_vecs = [
+                extractor.extract_text_embedding(nc.strip())[0]
+                for nc in negative_cues
+                if nc.strip()
+            ]
+            if neg_vecs:
+                neg_mean = np.mean(neg_vecs, axis=0).astype(np.float32)
+                shifted = q_vec[0] - 0.35 * neg_mean
+                norm = float(np.linalg.norm(shifted))
+                if norm > 1e-6:
+                    q_vec = (shifted / norm).reshape(1, -1)
+
+        # If filtering by a specific video_id, score all vectors of that video directly
+        # to prevent global top_k cutoff from starving single-video queries
         if video_id:
-            raw_hits = [h for h in raw_hits if h.get("video_id") == video_id]
+            if not hasattr(vec_idx, "_vid_to_int_ids"):
+                vid_map: Dict[str, List[int]] = {}
+                for idx_i, meta in enumerate(vec_idx.id_to_metadata):
+                    v_id = meta.get("video_id")
+                    if v_id:
+                        vid_map.setdefault(v_id, []).append(idx_i)
+                vec_idx._vid_to_int_ids = vid_map
 
+            vid_indices = vec_idx._vid_to_int_ids.get(video_id, [])
+            if not vid_indices:
+                return []
+
+            q_flat = q_vec.reshape(-1)
+            scored_items: List[Dict[str, Any]] = []
+            for f_id in vid_indices:
+                v_reconstructed = vec_idx.index.reconstruct(f_id)
+                sim = float(np.dot(v_reconstructed, q_flat))
+                item = dict(vec_idx.id_to_metadata[f_id])
+                item["score"] = sim
+                scored_items.append(item)
+
+            scored_items.sort(key=lambda x: x["score"], reverse=True)
+            selected = scored_items[:top_k]
+            for r_idx, it in enumerate(selected, start=1):
+                it["rank"] = r_idx
+            return selected
+
+        raw_hits = vec_idx.search(q_vec, top_k=top_k)
         return raw_hits
 
     def _search_ocr_cue(
