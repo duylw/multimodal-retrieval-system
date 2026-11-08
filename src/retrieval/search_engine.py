@@ -158,13 +158,15 @@ class SearchEngine:
                 for r_idx, h in enumerate(top_slice):
                     h_vid = h.get("video_id", "")
                     h_kfid = h.get("keyframe_id", "")
+                    h_fp = h.get("file_path") or self.db.get_keyframe_path(h_kfid)
+                    img_name = Path(h_fp).name if h_fp else f"{h_kfid}.jpg"
                     top_hits_trace.append({
                         "rank": r_idx + 1,
                         "video_id": h_vid,
                         "keyframe_id": h_kfid,
                         "timestamp_sec": round(float(h.get("timestamp_sec", 0.0)), 2),
                         "score": round(float(h.get("score", 0.0)), 4),
-                        "thumbnail_url": f"/api/keyframes/{h_vid}/{h_kfid}.jpg"
+                        "thumbnail_url": f"/api/keyframes/{h_vid}/{img_name}"
                     })
 
                 cues_trace.append({
@@ -192,6 +194,8 @@ class SearchEngine:
                 for r_idx, h in enumerate(top_slice):
                     h_vid = h.get("video_id", "")
                     h_kfid = h.get("keyframe_id", "")
+                    h_fp = self.db.get_keyframe_path(h_kfid)
+                    img_name = Path(h_fp).name if h_fp else f"{h_kfid}.jpg"
                     top_hits_trace.append({
                         "rank": r_idx + 1,
                         "video_id": h_vid,
@@ -199,7 +203,7 @@ class SearchEngine:
                         "timestamp_sec": round(float(h.get("timestamp_sec", 0.0)), 2),
                         "score": round(float(h.get("score", 0.0)), 4),
                         "text_detected": h.get("text_detected", ""),
-                        "thumbnail_url": f"/api/keyframes/{h_vid}/{h_kfid}.jpg"
+                        "thumbnail_url": f"/api/keyframes/{h_vid}/{img_name}"
                     })
 
                 cues_trace.append({
@@ -330,10 +334,9 @@ class SearchEngine:
         for m in moments:
             vid = m.video_id
             if m.keyframe_id and not m.thumbnail_url:
-                img_name = f"{m.keyframe_id}.jpg"
-                candidate_path = self.keyframes_dir / vid / img_name
-                if candidate_path.exists():
-                    m.thumbnail_url = f"/api/keyframes/{vid}/{img_name}"
+                fp = self.db.get_keyframe_path(m.keyframe_id)
+                if fp:
+                    m.thumbnail_url = f"/api/keyframes/{vid}/{Path(fp).name}"
                 else:
                     m.thumbnail_url = f"/api/keyframes/{vid}/{m.keyframe_id}.jpg"
 
@@ -343,7 +346,11 @@ class SearchEngine:
                     c_vid = hit.get("video_id") or vid
                     c_kfid = hit.get("keyframe_id")
                     if c_kfid and not hit.get("thumbnail_url"):
-                        hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{c_kfid}.jpg"
+                        fp = self.db.get_keyframe_path(c_kfid)
+                        if fp:
+                            hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{Path(fp).name}"
+                        else:
+                            hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{c_kfid}.jpg"
 
 
 def main() -> None:

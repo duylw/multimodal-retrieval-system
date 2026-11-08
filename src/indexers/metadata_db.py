@@ -331,6 +331,16 @@ class MetadataDB:
                 for r in rows
             ]
 
+    def get_keyframe_path(self, keyframe_id: str) -> Optional[str]:
+        """Retrieves the file_path for a keyframe_id via indexed primary key lookup."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT file_path FROM keyframes WHERE keyframe_id = ? LIMIT 1;",
+                (keyframe_id,)
+            )
+            row = cursor.fetchone()
+            return row["file_path"] if row else None
+
     def get_videos(self) -> List[Dict[str, Any]]:
         """Retrieves catalog list of all recorded videos."""
         with self._get_connection() as conn:

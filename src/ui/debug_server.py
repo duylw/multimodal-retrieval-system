@@ -220,11 +220,19 @@ def stream_video(video_id: str, request: Request) -> Response:
 
 @app.get("/api/keyframes/{video_id}/{filename}")
 def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
-    """Serves extracted keyframe JPEG image."""
+    """Serves extracted keyframe JPEG image by filename or keyframe_id."""
     img_path = KEYFRAMES_DIR / video_id / filename
-    if not img_path.exists():
-        raise HTTPException(status_code=404, detail="Keyframe image not found.")
-    return FileResponse(path=str(img_path), media_type="image/jpeg")
+    if img_path.exists():
+        return FileResponse(path=str(img_path), media_type="image/jpeg")
+
+    # If filename is a keyframe_id (e.g. L16_V022_00168.jpg or L16_V022_00168)
+    kfid = filename[:-4] if filename.lower().endswith(".jpg") else filename
+    db = get_db()
+    fp = db.get_keyframe_path(kfid)
+    if fp and Path(fp).exists():
+        return FileResponse(path=str(fp), media_type="image/jpeg")
+
+    raise HTTPException(status_code=404, detail=f"Keyframe image '{filename}' not found for video '{video_id}'.")
 
 
 # Global lazy-loaded search components
