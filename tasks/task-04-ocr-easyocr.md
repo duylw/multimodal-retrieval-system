@@ -36,8 +36,8 @@
    * Populate SQLite `ocr_records`:
      `ocr_id`, `video_id`, `keyframe_id`, `timestamp_sec`, `text_detected`, `bbox`, `confidence`.
 
-### Step 2.3: Full-Text Search Indexing & Two-Stage Hybrid Retrieval
-* Construct virtual table supporting unicode Vietnamese queries with accent and d-stroke folding:
+### Step 2.3: Keyframe-Aggregated Full-Text Search Indexing & Two-Stage Hybrid Retrieval
+* Construct virtual table supporting unicode Vietnamese queries with accent and d-stroke folding in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py):
   ```sql
   CREATE VIRTUAL TABLE IF NOT EXISTS ocr_fts USING fts5(
       ocr_id UNINDEXED,
@@ -48,10 +48,13 @@
       tokenize = 'unicode61 remove_diacritics 2'
   );
   ```
+* **Keyframe-Level Document Aggregation (`GROUP_CONCAT` per `keyframe_id`):**
+  * While `ocr_records` preserves individual bounding boxes (`bbox_json`), `ocr_fts` aggregates all text boxes detected on the same `keyframe_id` into a **single unified text document per keyframe** (`rebuild_ocr_fts_by_keyframe()`).
+  * Prevents multi-line signboards, banners, or news tickers split across multiple bounding boxes from failing multi-word BM25 and fuzzy phrase alignment.
 * Queries fold `đ`/`Đ` to `d`/`D` and strip diacritics, matching unaccented, accented, uppercase, or lowercase text uniformly.
 * **Two-Stage Hybrid Search Engine:**
-  * **Stage 1 (Coarse Candidate Retrieval via SQLite FTS5 Soft OR):** Uses disjunctive `OR` wildcard matching (`"word1"* OR "word2"*`) to retrieve candidate keyframes (top 50-100) even when OCR mistranscribes individual words, preventing strict conjunction filtering failures.
-  * **Stage 2 (Fine-Grained Token-Level Fuzzy Rescoring via Python):** Uses `difflib.SequenceMatcher` with Vietnamese diacritic folding (`fold_vietnamese()`) to compute word-by-word alignment similarities and substring bonuses.
+  * **Stage 1 (Deep Coarse Candidate Retrieval via SQLite FTS5 Soft OR):** Uses disjunctive `OR` wildcard matching (`"word1"* OR "word2"*`) with a deep candidate pool (`pool_limit = max(limit * 10, 500)`) so keyframes containing rare or slightly misspelled target words are not starved out by common broadcast terms.
+  * **Stage 2 (Fine-Grained Token-Level Fuzzy Rescoring via Python):** Uses `difflib.SequenceMatcher` with Vietnamese diacritic folding (`fold_vietnamese()`) to compute word-by-word alignment similarities and substring bonuses across the aggregated keyframe text.
   * **Final Score:** Blends BM25 term frequency with token-level character similarity:
     `Final_Score = 0.35 * Normalized_BM25 + 0.65 * Token_Fuzzy_Score`.
   * Guarantees high Recall and Precision on Known-Item Search (KIS) queries even under extreme OCR character confusion (e.g. `Irùng` vs `trùng`, `Quôc` vs `Quốc`, `lón` vs `lớn`).

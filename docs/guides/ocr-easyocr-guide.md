@@ -69,6 +69,7 @@ uv run python -m src.extractors.run_ocr --video-id L13_V001 --gpu --skip-filter
   * `bbox_json`: JSON coordinates of the bounding polygon.
 * **Virtual Full-Text Table (`ocr_fts`):**
   * Fast BM25 keyword matching with diacritic stripping and d-stroke folding (`đ`/`Đ` -> `d`/`D`).
+  * Aggregates all bounding-box detections belonging to the same `keyframe_id` into a single unified keyframe document (`GROUP_CONCAT(text_detected, ' ')`) to support multi-line banner and signboard matching.
 * **Checkpoint Status:** Marked `COMPLETED` for stage `ocr` in [pipeline_checkpoints](file:///d:/UIT/TX/doan/data/metadata.db).
 
 ---
@@ -82,10 +83,10 @@ To resolve this, [MetadataDB.search_ocr()](file:///d:/UIT/TX/doan/src/indexers/m
 ```
 [User Query: "trùng biển số"]
         │
-        ▼ (Stage 1: Coarse Retrieval via SQLite FTS5)
+        ▼ (Stage 1: Deep Coarse Retrieval via Keyframe-Aggregated SQLite FTS5)
 [FTS5 Soft OR Query: "trung"* OR "bien"* OR "so"*]
         │
-        ├─► Retrieves Top 50-100 candidate keyframes matching any query terms (Recall = 100%)
+        ├─► Retrieves deep candidate pool (pool_limit >= 500) matching any query terms
         │
         ▼ (Stage 2: Fine-Grained Token-Level Fuzzy Rescoring via Python CPU)
 [Token-Level SequenceMatcher & Vietnamese Diacritic Folding]
