@@ -372,20 +372,66 @@ class MetadataDB:
                 for r in records
             ])
 
+            # Group detected texts per keyframe for keyframe-level FTS5 document aggregation
+            kf_groups: Dict[str, Dict[str, Any]] = {}
+            for r in records:
+                if r.keyframe_id not in kf_groups:
+                    kf_groups[r.keyframe_id] = {
+                        "video_id": r.video_id,
+                        "timestamp_sec": r.timestamp_sec,
+                        "texts": []
+                    }
+                kf_groups[r.keyframe_id]["texts"].append(r.text_detected)
+
             conn.executemany("""
                 INSERT INTO ocr_fts (ocr_id, video_id, keyframe_id, timestamp_sec, text_detected)
                 VALUES (?, ?, ?, ?, ?);
             """, [
                 (
-                    r.ocr_id,
-                    r.video_id,
-                    r.keyframe_id,
-                    r.timestamp_sec,
-                    r.text_detected.replace('đ', 'd').replace('Đ', 'D')
+                    k_id,
+                    g["video_id"],
+                    k_id,
+                    g["timestamp_sec"],
+                    " ".join(g["texts"]).replace('đ', 'd').replace('Đ', 'D')
                 )
-                for r in records
+                for k_id, g in kf_groups.items()
             ])
             conn.commit()
+
+    def rebuild_ocr_fts_by_keyframe(self) -> int:
+        """
+        Rebuilds ocr_fts table to aggregate text detections at the keyframe level
+        (one FTS5 document per unique keyframe_id with space-concatenated text).
+        Eliminates bounding-box fragmentation across multi-line signage and banners.
+        Returns the number of aggregated keyframe documents inserted.
+        """
+        with self._get_connection() as conn:
+            conn.execute("DROP TABLE IF EXISTS ocr_fts;")
+            conn.execute("""
+                CREATE VIRTUAL TABLE ocr_fts USING fts5(
+                    ocr_id UNINDEXED,
+                    video_id UNINDEXED,
+                    keyframe_id UNINDEXED,
+                    timestamp_sec UNINDEXED,
+                    text_detected,
+                    tokenize = 'unicode61 remove_diacritics 2'
+                );
+            """)
+            cursor = conn.execute("""
+                INSERT INTO ocr_fts (ocr_id, video_id, keyframe_id, timestamp_sec, text_detected)
+                SELECT 
+                    keyframe_id, 
+                    video_id, 
+                    keyframe_id, 
+                    MIN(timestamp_sec), 
+                    REPLACE(REPLACE(GROUP_CONCAT(text_detected, ' '), 'đ', 'd'), 'Đ', 'D')
+                FROM ocr_records
+                GROUP BY keyframe_id;
+            """)
+            count = cursor.rowcount
+            conn.commit()
+            logger.info(f"[OK] Rebuilt ocr_fts at keyframe level: {count} aggregated keyframes indexed.")
+            return count
 
     def delete_ocr_records(self, video_id: str) -> None:
         """Deletes all OCR records for a video from both relational and FTS5 tables."""
@@ -448,8 +494,8 @@ class MetadataDB:
             where_clause += " AND video_id = ?"
             params.append(video_id)
 
-        # Retrieve a candidate pool (up to 3x limit, min 100) for fuzzy reranking
-        pool_limit = max(limit * 3, 100)
+        # Retrieve a deep candidate pool (up to 10x limit, min 500) for fuzzy reranking
+        pool_limit = max(limit * 10, 500)
         params.append(pool_limit)
 
         sql = f"""

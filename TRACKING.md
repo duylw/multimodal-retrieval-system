@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 3: Multimodal Fusion & Query Routing (Task 05)**
-* **Overall Progress:** `75%`
-* **Current Focus:** Completed full-dataset feature extraction across 726/726 videos for both Visual SigLIP2 (321.6MB FAISS Index) and EasyOCR (568,562 FTS5 records). Implemented Two-Stage Fault-Tolerant Hybrid OCR Search (FTS5 Soft OR + Token-level Fuzzy Rescoring) for Known-Item Search. Ready for Task 05 (Temporal Multimodal Fusion & Query Routing).
+* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Task 06 & Task 06B)**
+* **Overall Progress:** `85%`
+* **Current Focus:** Completed Task 05 (Temporal Multimodal Fusion & Query Routing). Upgraded SQLite `ocr_fts` to keyframe-level aggregated documents (187,518 records), built multi-cue and sequence query parser (`v:`, `ocr:`, `>>`), implemented Max-Per-Cue Reciprocal Rank Fusion (RRF) inside 5s sliding windows, temporal NMS, and unified multimodal search engine with FastAPI endpoints. Ready for Task 06 (Web Interface & Multi-Cue Query Builder) and Task 06B (KIS Interactive Scrubber & DRES Live Submission).
 
 ---
 
@@ -26,7 +26,7 @@
 | **Task 02B** | Fault Tolerance & Modular Refactoring | Checkpointing DB table, engine-runner separation, decoupled index builder | **Completed** | [task-02b](file:///d:/UIT/TX/doan/tasks/task-02b-fault-tolerance-and-modular-refactoring.md) | `pipeline_checkpoints`, `run_*.py`, `build_indices.py` |
 | **Task 02C** | Visual DataLoader & SigLIP2-Base | Switch to SigLIP2-Base, PyTorch DataLoader num_workers=2, models/ D: drive centralization | **Completed** | [task-02c](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md) | SigLIP2-Base DataLoader pipeline, `models/`, benchmark report |
 | **Task 04** | On-screen Text EasyOCR | Text keyframe detector, EasyOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-easyocr-guide.md` |
-| **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Ready** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py` |
+| **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Completed** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py`, `multimodal-fusion-guide.md` |
 | **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | Frame-accurate stepper, Mark In/Out range, interval preview, DRES live submit | **Pending** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css` |
 
@@ -47,9 +47,13 @@
   * [x] On-screen text extraction with EasyOCR running purely on CPU (0MB GPU VRAM).
   * [x] Morphological edge-density pre-filter (~9ms/frame) pruning non-text frames.
   * [x] SQLite FTS5 full-text search index (`ocr_fts`) with `unicode61 remove_diacritics 2` for accent-insensitive search.
-* [ ] **Milestone 3: Temporal Multimodal Fusion & Scientific Ablation Study**
-  * Sliding window score aggregation (5s) and Reciprocal Rank Fusion (RRF) between Visual and OCR channels.
-  * Ablation study tables measuring incremental contributions across Visual Only, Text Only, and Full Fusion.
+* [x] **Milestone 3: Temporal Multimodal Fusion & Query Routing** (Completed Nov 08, 2026)
+  * [x] Keyframe-aggregated SQLite FTS5 migration (187,518 keyframes) and deep Top-K candidate pooling.
+  * [x] Multi-cue and chronological sequence query parser (`v:`, `ocr:`, `>>`, inline quotes, structured dict).
+  * [x] Max-Per-Cue Reciprocal Rank Fusion (RRF), consensus multipliers, and temporal Non-Maximum Suppression (NMS).
+  * [x] Unified multimodal search orchestrator with lazy-loading and CLI runner.
+  * [x] FastAPI REST endpoints (`/api/search/multimodal`) with VRAM unload lifecycle.
+  * [x] Practical feature guide in [multimodal-fusion-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-fusion-guide.md).
 * [ ] **Milestone 4: Web Application Delivery & Thesis Defense**
   * Search UI with timestamp-accurate video playback and relevance feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
   * KIS Interactive Scrubber, Mark In/Out range selector, pre-submission preview, and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
@@ -145,13 +149,21 @@
     * Enforced zero-raw-`print()` rule with structured `loguru` text badges (`[INFO]`, `[OK]`, `[WARNING]`, `[ERROR]`) and defensive exception handling.
     * Specified domain-specific Information Retrieval (IR) design patterns: Strategy Pattern for score fusion, Router/Factory Pattern for query decomposition, and Context Manager Pattern for safe resource protection.
     * Registered skill in [AGENTS.md](file:///d:/UIT/TX/doan/AGENTS.md) and [PROJECT_OVERVIEW.md](file:///d:/UIT/TX/doan/PROJECT_OVERVIEW.md).
+  * Implemented and completed **[Task 05: Temporal Multimodal Fusion, Query Routing & Multi-Cue Composition](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md)**:
+    * Executed one-time migration `rebuild_ocr_fts_by_keyframe()` in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py): aggregated 568,562 OCR records into 187,518 keyframe-level FTS5 documents in 2.75s, enabling holistic banner and sign matching.
+    * Expanded OCR candidate pool depth (`pool_limit = max(limit * 10, 500)`) preventing high-frequency word starvation.
+    * Implemented `QueryParser` in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) supporting power-user prefixes (`v:`, `ocr:`), sequence syntax (`>>`), Google-style quotes (`ocr:"..."`), vehicle plate regex, and structured JSON payloads.
+    * Implemented `TemporalMomentFusor` and `MaxPerCueRRFStrategy` in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py) with anti-double-counting, multi-cue consensus multipliers, chronological sequence alignment within a 15s horizon, and temporal Non-Maximum Suppression (NMS with `IoU >= 0.3`).
+    * Built unified `SearchEngine` in [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py) with lazy-loaded singletons, CLI runner, and safe VRAM release.
+    * Added REST endpoints `GET /api/search/multimodal` and `POST /api/search/multimodal` to [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) with automated candidate formatting and thumbnail resolution.
+    * Authored comprehensive feature documentation guide in [docs/guides/multimodal-fusion-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-fusion-guide.md).
+    * Created unit test suite in [tests/test_retrieval.py](file:///d:/UIT/TX/doan/tests/test_retrieval.py) verifying all parser patterns, anti-double-counting, and consensus boost.
 
 ---
 
 ## 5. Next Action
-* **Execute [Task 05: Temporal Multimodal Fusion, Query Routing & Multi-Cue Composition](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md):**
-  1. Upgrade `ocr_fts` in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py) with `rebuild_ocr_fts_by_keyframe()` (keyframe-level document aggregation) and expanded Stage 1 candidate pool (`pool_limit >= 500`).
-  2. Implement multi-cue and chronological sequence parser (`v:`, `ocr:`, `|`, `>>`) in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py).
-  3. Implement Deep Candidate Retrieval (`top_k_visual = 1500`, `top_k_ocr = 500`), Max-Per-Cue RRF inside 5.0s sliding windows (stride 2.5s), Consensus Multiplier, and Sequential Stage Linker (`>>` within 15s horizon) in [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py).
-  4. Implement temporal Non-Maximum Suppression (NMS) (`IoU >= 0.4`) and unified search orchestrator in [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py).
+* **Implement [Task 06: Web Interface & Relevance Feedback](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) & [Task 06B: KIS Interactive Scrubber & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md):**
+  1. Build multi-cue interactive builder UI on the frontend (`src/ui/static/index.html`, `app.js`, `style.css`) allowing users to add/remove dynamic Visual and OCR cue pills, reorder stages, or use power-user query strings.
+  2. Implement KIS Interactive Scrubber with frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and Mark In (`I`) / Mark Out (`O`) range selectors.
+  3. Integrate 1-click live DRES API v2 submission connector with duplicate suppression and real-time score decay simulator.
 

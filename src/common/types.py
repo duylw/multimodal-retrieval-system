@@ -4,7 +4,7 @@ All structures use standard Python dataclasses for strong typing and immutabilit
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 @dataclass
@@ -96,4 +96,35 @@ class DRESAnswerSet:
 class DRESSubmissionPayload:
     """Represents the complete submission envelope for DRES API v2."""
     answerSets: List[DRESAnswerSet] = field(default_factory=list)
+
+
+@dataclass
+class CandidateMoment:
+    """Represents a temporally fused candidate video moment with DRES-compliant millisecond bounds."""
+    video_id: str
+    start_sec: float
+    end_sec: float
+    start_ms: int
+    end_ms: int
+    score: float
+    matched_cues: List[str] = field(default_factory=list)
+    keyframe_id: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    text_snippet: Optional[str] = None
+
+
+@dataclass
+class QueryStage:
+    """Represents a single temporal stage of a multi-cue query."""
+    visual_queries: List[str] = field(default_factory=list)
+    ocr_queries: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedMultiCueQuery:
+    """Represents a decomposed multi-cue and optional sequential query."""
+    stages: List[QueryStage] = field(default_factory=list)
+    is_sequential: bool = False
+    weights: Dict[str, float] = field(default_factory=lambda: {"visual": 1.0, "ocr": 1.5})
+
 

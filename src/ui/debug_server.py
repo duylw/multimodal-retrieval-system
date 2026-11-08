@@ -230,6 +230,102 @@ def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
 # Global lazy-loaded search components
 _vector_index: Optional[Any] = None
 _visual_extractor: Optional[Any] = None
+_search_engine: Optional[Any] = None
+
+
+def get_search_engine() -> Any:
+    """Lazy-initializes SearchEngine singleton."""
+    global _search_engine
+    if _search_engine is None:
+        from src.retrieval.search_engine import SearchEngine
+        _search_engine = SearchEngine()
+    return _search_engine
+
+
+@app.get("/api/search/multimodal")
+def search_multimodal_endpoint(
+    query: str,
+    mode: str = "auto",
+    top_k: int = 25,
+    video_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Unified Multimodal Search: Multi-Cue RRF fusion, 5s sliding window, and NMS."""
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Query string cannot be empty.")
+
+    engine = get_search_engine()
+    vid_filter = video_id.strip() if video_id and video_id.strip() else None
+    moments = engine.search(query=query.strip(), mode=mode, top_k=top_k, video_id=vid_filter)
+
+    results = []
+    for rank, m in enumerate(moments, start=1):
+        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
+        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
+        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
+
+        results.append({
+            "rank": rank,
+            "score": m.score,
+            "video_id": m.video_id,
+            "start_sec": m.start_sec,
+            "end_sec": m.end_sec,
+            "start_ms": m.start_ms,
+            "end_ms": m.end_ms,
+            "formatted_time": time_str,
+            "matched_cues": m.matched_cues,
+            "keyframe_id": m.keyframe_id,
+            "thumbnail_url": m.thumbnail_url,
+            "text_detected": m.text_snippet,
+            "is_multimodal": True
+        })
+
+    return {
+        "query": query,
+        "mode": mode,
+        "total_results": len(results),
+        "candidates": results
+    }
+
+
+@app.post("/api/search/multimodal")
+def search_multimodal_post_endpoint(
+    payload: Dict[str, Any],
+    mode: str = "auto",
+    top_k: int = 25,
+    video_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Structured Multi-Cue JSON search endpoint."""
+    engine = get_search_engine()
+    vid_filter = video_id.strip() if video_id and video_id.strip() else None
+    moments = engine.search(query=payload, mode=mode, top_k=top_k, video_id=vid_filter)
+
+    results = []
+    for rank, m in enumerate(moments, start=1):
+        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
+        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
+        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
+
+        results.append({
+            "rank": rank,
+            "score": m.score,
+            "video_id": m.video_id,
+            "start_sec": m.start_sec,
+            "end_sec": m.end_sec,
+            "start_ms": m.start_ms,
+            "end_ms": m.end_ms,
+            "formatted_time": time_str,
+            "matched_cues": m.matched_cues,
+            "keyframe_id": m.keyframe_id,
+            "thumbnail_url": m.thumbnail_url,
+            "text_detected": m.text_snippet,
+            "is_multimodal": True
+        })
+
+    return {
+        "mode": mode,
+        "total_results": len(results),
+        "candidates": results
+    }
 
 
 @app.get("/api/search/visual")
@@ -412,10 +508,13 @@ def search_ocr_endpoint(
 @app.post("/api/search/unload")
 def unload_search_model() -> Dict[str, str]:
     """Releases SigLIP2 model from GPU VRAM."""
-    global _visual_extractor
+    global _visual_extractor, _search_engine
     if _visual_extractor is not None:
         _visual_extractor.safe_unload()
         _visual_extractor = None
+    if _search_engine is not None:
+        _search_engine.safe_unload()
+        _search_engine = None
     return {"status": "ok", "message": "GPU VRAM released"}
 
 

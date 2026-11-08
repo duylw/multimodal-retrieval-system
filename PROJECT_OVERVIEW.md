@@ -116,6 +116,7 @@ d:/UIT/TX/doan/
 │       ├── shot-keyframe-inspector.md
 │       ├── visual-siglip-faiss.md
 │       ├── ocr-easyocr-guide.md
+│       ├── multimodal-fusion-guide.md
 │       ├── submission-protocol-guide.md
 │       └── debug-ui-guide.md
 │
