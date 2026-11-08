@@ -632,7 +632,7 @@ function renderPipelineTrace() {
                 state.activeTraceCueIdx = idx;
                 renderPipelineTrace();
             });
-            cuesNav.appendChild(btn);
+            traceCuesNav.appendChild(btn);
         });
     }
 
