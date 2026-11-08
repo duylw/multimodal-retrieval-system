@@ -6,7 +6,8 @@ query routing, and temporal multi-cue RRF fusion into CandidateMoments.
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
 from loguru import logger
 
 from src.common.types import CandidateMoment, ParsedMultiCueQuery, QueryStage
@@ -102,14 +103,41 @@ class SearchEngine:
         Returns:
             List of CandidateMoment instances sorted by fused score.
         """
+        moments, _ = self.search_with_trace(
+            query=query,
+            mode=mode,
+            top_k=top_k,
+            video_id=video_id,
+            trace_top_hits=0
+        )
+        return moments
+
+    def search_with_trace(
+        self,
+        query: Union[str, Dict[str, Any], ParsedMultiCueQuery],
+        mode: str = "auto",
+        top_k: int = 25,
+        video_id: Optional[str] = None,
+        trace_top_hits: int = 10
+    ) -> Tuple[List[CandidateMoment], Dict[str, Any]]:
+        """
+        Executes multimodal search with explainability trace capturing per-cue hits and fusion stats.
+
+        Returns:
+            Tuple of (List of CandidateMoment, execution trace dictionary).
+        """
+        start_time = time.perf_counter()
         parsed = self._prepare_query(query, mode=mode)
         if not parsed.stages:
             logger.warning("[WARNING] No valid query stages found.")
-            return []
+            return [], {
+                "error": "No valid query stages found.",
+                "total_time_ms": round((time.perf_counter() - start_time) * 1000, 2)
+            }
 
-        # Maps each unique cue_id -> modality ('visual' or 'ocr')
         cue_types: Dict[str, str] = {}
         stage_results: List[Dict[str, List[Dict[str, Any]]]] = []
+        cues_trace: List[Dict[str, Any]] = []
 
         for s_idx, stage in enumerate(parsed.stages):
             hits_by_cue: Dict[str, List[Dict[str, Any]]] = {}
@@ -118,15 +146,71 @@ class SearchEngine:
             for v_idx, v_cue in enumerate(stage.visual_queries):
                 cue_id = f"s{s_idx}_v{v_idx}"
                 cue_types[cue_id] = "visual"
+
+                t0 = time.perf_counter()
                 hits = self._search_visual_cue(v_cue, top_k=self.top_k_visual, video_id=video_id)
+                lat_ms = round((time.perf_counter() - t0) * 1000, 2)
                 hits_by_cue[cue_id] = hits
+
+                # Decorate top hits for inspection trace
+                top_slice = hits[:trace_top_hits] if trace_top_hits > 0 else []
+                top_hits_trace = []
+                for r_idx, h in enumerate(top_slice):
+                    h_vid = h.get("video_id", "")
+                    h_kfid = h.get("keyframe_id", "")
+                    top_hits_trace.append({
+                        "rank": r_idx + 1,
+                        "video_id": h_vid,
+                        "keyframe_id": h_kfid,
+                        "timestamp_sec": round(float(h.get("timestamp_sec", 0.0)), 2),
+                        "score": round(float(h.get("score", 0.0)), 4),
+                        "thumbnail_url": f"/api/keyframes/{h_vid}/{h_kfid}.jpg"
+                    })
+
+                cues_trace.append({
+                    "cue_id": cue_id,
+                    "stage_index": s_idx,
+                    "modality": "visual",
+                    "query_text": v_cue,
+                    "hits_count": len(hits),
+                    "latency_ms": lat_ms,
+                    "top_hits": top_hits_trace
+                })
 
             # 2. Execute OCR Cues
             for o_idx, o_cue in enumerate(stage.ocr_queries):
                 cue_id = f"s{s_idx}_ocr{o_idx}"
                 cue_types[cue_id] = "ocr"
+
+                t0 = time.perf_counter()
                 hits = self._search_ocr_cue(o_cue, top_k=self.top_k_ocr, video_id=video_id)
+                lat_ms = round((time.perf_counter() - t0) * 1000, 2)
                 hits_by_cue[cue_id] = hits
+
+                top_slice = hits[:trace_top_hits] if trace_top_hits > 0 else []
+                top_hits_trace = []
+                for r_idx, h in enumerate(top_slice):
+                    h_vid = h.get("video_id", "")
+                    h_kfid = h.get("keyframe_id", "")
+                    top_hits_trace.append({
+                        "rank": r_idx + 1,
+                        "video_id": h_vid,
+                        "keyframe_id": h_kfid,
+                        "timestamp_sec": round(float(h.get("timestamp_sec", 0.0)), 2),
+                        "score": round(float(h.get("score", 0.0)), 4),
+                        "text_detected": h.get("text_detected", ""),
+                        "thumbnail_url": f"/api/keyframes/{h_vid}/{h_kfid}.jpg"
+                    })
+
+                cues_trace.append({
+                    "cue_id": cue_id,
+                    "stage_index": s_idx,
+                    "modality": "ocr",
+                    "query_text": o_cue,
+                    "hits_count": len(hits),
+                    "latency_ms": lat_ms,
+                    "top_hits": top_hits_trace
+                })
 
             stage_results.append(hits_by_cue)
 
@@ -140,7 +224,29 @@ class SearchEngine:
 
         # 4. Decorate moments with keyframe images and thumbnail URLs
         self._decorate_moments(moments)
-        return moments
+
+        total_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        trace = {
+            "query": query if isinstance(query, (str, dict)) else str(query),
+            "mode": mode,
+            "is_sequential": parsed.is_sequential,
+            "total_stages": len(parsed.stages),
+            "parsed_stages": [
+                {
+                    "stage_index": idx,
+                    "visual_queries": st.visual_queries,
+                    "ocr_queries": st.ocr_queries
+                }
+                for idx, st in enumerate(parsed.stages)
+            ],
+            "cues": cues_trace,
+            "consensus_moments_count": sum(1 for m in moments if len(m.matched_cues) > 1),
+            "total_moments_found": len(moments),
+            "total_time_ms": total_time_ms
+        }
+
+        return moments, trace
 
     def _prepare_query(
         self,
@@ -224,14 +330,20 @@ class SearchEngine:
         for m in moments:
             vid = m.video_id
             if m.keyframe_id and not m.thumbnail_url:
-                # Find matching JPEG on disk
                 img_name = f"{m.keyframe_id}.jpg"
                 candidate_path = self.keyframes_dir / vid / img_name
                 if candidate_path.exists():
                     m.thumbnail_url = f"/api/keyframes/{vid}/{img_name}"
                 else:
-                    # Fallback to any matching keyframe in that video
                     m.thumbnail_url = f"/api/keyframes/{vid}/{m.keyframe_id}.jpg"
+
+            # Decorate individual cue evidence hits
+            if m.cue_evidence:
+                for cue_id, hit in m.cue_evidence.items():
+                    c_vid = hit.get("video_id") or vid
+                    c_kfid = hit.get("keyframe_id")
+                    if c_kfid and not hit.get("thumbnail_url"):
+                        hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{c_kfid}.jpg"
 
 
 def main() -> None:
@@ -240,11 +352,30 @@ def main() -> None:
     parser.add_argument("--mode", type=str, default="auto", choices=["auto", "visual", "ocr"], help="Search mode.")
     parser.add_argument("--top-k", type=int, default=10, help="Number of moments to retrieve.")
     parser.add_argument("--video-id", type=str, default=None, help="Filter search to a specific video ID.")
+    parser.add_argument("--trace", action="store_true", help="Print explainable pipeline execution trace.")
     args = parser.parse_args()
 
     engine = SearchEngine()
     try:
-        results = engine.search(query=args.query, mode=args.mode, top_k=args.top_k, video_id=args.video_id)
+        results, trace = engine.search_with_trace(
+            query=args.query,
+            mode=args.mode,
+            top_k=args.top_k,
+            video_id=args.video_id,
+            trace_top_hits=5
+        )
+
+        if args.trace:
+            print("\n" + "=" * 80)
+            print(f"[TRACE] Pipeline Turnaround Time: {trace['total_time_ms']} ms | Stages: {trace['total_stages']} | Sequential: {trace['is_sequential']}")
+            print(f"[TRACE] Multi-Cue Consensus Moments: {trace['consensus_moments_count']} / {trace['total_moments_found']}")
+            for cue in trace.get("cues", []):
+                print(f"  -> Cue '{cue['cue_id']}' [{cue['modality'].upper()}]: '{cue['query_text']}' | Hits: {cue['hits_count']} in {cue['latency_ms']} ms")
+                for th in cue.get("top_hits", [])[:3]:
+                    txt = f" | Text: '{th.get('text_detected', '')[:30]}'" if "text_detected" in th else ""
+                    print(f"       #{th['rank']}: {th['keyframe_id']} ({th['timestamp_sec']}s) Score: {th['score']:.4f}{txt}")
+            print("=" * 80)
+
         print(f"\n[OK] Retrieved {len(results)} candidate moments for query: '{args.query}' (Mode: {args.mode})")
         print("=" * 80)
         for rank, m in enumerate(results, start=1):
@@ -254,6 +385,9 @@ def main() -> None:
             cues_str = ", ".join(m.matched_cues)
             snippet = f" | Text: '{m.text_snippet[:40]}...'" if m.text_snippet else ""
             print(f"Rank #{rank:02d} | Score: {m.score:.4f} | Video: {m.video_id} [{time_str}] ({m.start_ms}ms - {m.end_ms}ms) | Cues: [{cues_str}]{snippet}")
+            if args.trace and m.cue_evidence:
+                for c_id, c_hit in m.cue_evidence.items():
+                    print(f"       * Evidence [{c_id}]: {c_hit.get('keyframe_id')} @ {c_hit.get('timestamp_sec')}s (score: {float(c_hit.get('score', 0)):.4f})")
         print("=" * 80)
     finally:
         engine.safe_unload()

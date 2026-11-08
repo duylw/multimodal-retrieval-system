@@ -11,9 +11,13 @@ let state = {
     totalDuration: 0,
     isUserInteracting: false,
     searchResults: [],
+    searchTrace: null,
+    activeTraceCueIdx: 0,
     activeTab: "shots",
     activeCandidateRank: null,
-    searchMode: "visual",
+    searchMode: "auto",
+    feedbackPositives: new Set(),
+    feedbackNegatives: new Set(),
 };
 
 // DOM Elements
@@ -37,13 +41,26 @@ const btnPrevShot = document.getElementById("btnPrevShot");
 const btnNextShot = document.getElementById("btnNextShot");
 const btnJumpCenter = document.getElementById("btnJumpCenter");
 
-// Visual Search DOM Elements
+// Search & Multimodal DOM Elements
 const searchForm = document.getElementById("searchForm");
 const queryInput = document.getElementById("queryInput");
 const btnClearQuery = document.getElementById("btnClearQuery");
 const btnSearch = document.getElementById("btnSearch");
+const btnModeMultimodal = document.getElementById("btnModeMultimodal");
 const btnModeVisual = document.getElementById("btnModeVisual");
 const btnModeOcr = document.getElementById("btnModeOcr");
+const btnAddVisualCue = document.getElementById("btnAddVisualCue");
+const btnAddOcrCue = document.getElementById("btnAddOcrCue");
+const btnAddSeqStage = document.getElementById("btnAddSeqStage");
+const btnClearPills = document.getElementById("btnClearPills");
+const pipelineTracePanel = document.getElementById("pipelineTracePanel");
+const traceSummaryText = document.getElementById("traceSummaryText");
+const btnToggleTrace = document.getElementById("btnToggleTrace");
+const traceContent = document.getElementById("traceContent");
+const traceStageSummary = document.getElementById("traceStageSummary");
+const traceCuesNav = document.getElementById("traceCuesNav");
+const traceCueBody = document.getElementById("traceCueBody");
+
 const tabShots = document.getElementById("tabShots");
 const tabResults = document.getElementById("tabResults");
 const tabCheckpoints = document.getElementById("tabCheckpoints");
@@ -440,6 +457,7 @@ function switchTab(tabName) {
     shotControls.style.display = tabName === "shots" ? "flex" : "none";
     shotList.style.display = tabName === "shots" ? "flex" : "none";
     candidateList.style.display = tabName === "results" ? "flex" : "none";
+    if (pipelineTracePanel) pipelineTracePanel.style.display = (tabName === "results" && state.searchTrace) ? "block" : "none";
     if (checkpointPane) checkpointPane.style.display = tabName === "checkpoints" ? "flex" : "none";
 
     if (tabName === "checkpoints") {
@@ -518,7 +536,7 @@ function renderCheckpointTable() {
 }
 
 /**
- * Executes search via SigLIP2 + FAISS (Visual) or SQLite FTS5 (OCR).
+ * Executes search via Unified Multimodal Fusion (/api/search/multimodal).
  */
 async function executeSearch() {
     const query = queryInput.value.trim();
@@ -529,8 +547,10 @@ async function executeSearch() {
     btnClearQuery.style.display = "block";
     switchTab("results");
 
-    const isOcr = state.searchMode === "ocr";
-    const modeLabel = isOcr ? "Searching on-screen text with SQLite FTS5..." : "Encoding query & searching FAISS index...";
+    const mode = state.searchMode; // 'auto', 'visual', or 'ocr'
+    let modeLabel = "Executing multimodal fusion across 726 videos...";
+    if (mode === "visual") modeLabel = "Encoding visual query & searching SigLIP2 index...";
+    if (mode === "ocr") modeLabel = "Searching on-screen text with SQLite FTS5...";
 
     candidateList.innerHTML = `
         <div class="loading-state">
@@ -546,8 +566,7 @@ async function executeSearch() {
     try {
         const scopeCurrent = document.getElementById("chkCurrentVideoOnly")?.checked;
         const vidParam = (scopeCurrent && state.currentVideoId) ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
-        const endpoint = isOcr ? `/api/search/ocr?query=${encodeURIComponent(query)}${vidParam}&top_k=25`
-                              : `/api/search/visual?query=${encodeURIComponent(query)}${vidParam}&top_k=25`;
+        const endpoint = `/api/search/multimodal?query=${encodeURIComponent(query)}&mode=${encodeURIComponent(mode)}${vidParam}&top_k=25`;
         const res = await fetch(endpoint);
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
@@ -556,15 +575,167 @@ async function executeSearch() {
 
         const data = await res.json();
         state.searchResults = data.candidates || [];
+        state.searchTrace = data.trace || null;
+        state.activeTraceCueIdx = 0;
         tabResultCount.textContent = state.searchResults.length;
+
+        renderPipelineTrace();
         renderCandidateCards();
 
     } catch (err) {
         console.error("Search error:", err);
         candidateList.innerHTML = `<div class="empty-candidate-state" style="color: var(--color-short);">Error during search: ${err.message}</div>`;
+        if (pipelineTracePanel) pipelineTracePanel.style.display = "none";
     } finally {
         btnSearch.disabled = false;
         btnSearch.textContent = "Search";
+    }
+}
+
+/**
+ * Renders Explainable Pipeline Execution Trace.
+ */
+function renderPipelineTrace() {
+    if (!pipelineTracePanel) return;
+
+    if (!state.searchTrace) {
+        pipelineTracePanel.style.display = "none";
+        return;
+    }
+
+    const trace = state.searchTrace;
+    pipelineTracePanel.style.display = "block";
+
+    const cues = trace.cues || [];
+    if (traceSummaryText) {
+        traceSummaryText.textContent = `Decomposed ${cues.length} Cue(s) in ${trace.total_time_ms} ms | Found ${trace.consensus_moments_count} Consensus Moments`;
+    }
+
+    if (traceStageSummary) {
+        let stagesHtml = `<div style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;"><strong>Stage Breakdown:</strong></div>`;
+        (trace.parsed_stages || []).forEach(st => {
+            const vStr = st.visual_queries.map(q => `<span class="candidate-type-badge visual" style="margin-right: 4px;">[Visual: "${q}"]</span>`).join(" ");
+            const oStr = st.ocr_queries.map(q => `<span class="candidate-type-badge ocr" style="margin-right: 4px;">[OCR: "${q}"]</span>`).join(" ");
+            stagesHtml += `<div style="margin-bottom: 2px;">Stage #${st.stage_index}: ${vStr || '<span style="color: var(--text-dim); font-size: 11px;">none</span>'} ${oStr ? '+ ' + oStr : ''}</div>`;
+        });
+        traceStageSummary.innerHTML = stagesHtml;
+    }
+
+    if (traceCuesNav) {
+        traceCuesNav.innerHTML = "";
+        cues.forEach((c, idx) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = `trace-cue-tab ${idx === state.activeTraceCueIdx ? "active" : ""}`;
+            btn.innerHTML = `<strong>Cue #${idx + 1} [${c.modality.toUpperCase()}]:</strong> "${c.query_text.slice(0, 20)}" (${c.hits_count} hits, ${c.latency_ms}ms)`;
+            btn.addEventListener("click", () => {
+                state.activeTraceCueIdx = idx;
+                renderPipelineTrace();
+            });
+            cuesNav.appendChild(btn);
+        });
+    }
+
+    renderPipelineTraceCueBody();
+}
+
+/**
+ * Renders Top Hits for the selected cue inside the trace panel.
+ */
+function renderPipelineTraceCueBody() {
+    if (!traceCueBody || !state.searchTrace) return;
+
+    const cues = state.searchTrace.cues || [];
+    if (cues.length === 0) {
+        traceCueBody.innerHTML = `<div style="color: var(--text-dim); font-size: 11px;">No individual cue breakdown available.</div>`;
+        return;
+    }
+
+    const activeCue = cues[state.activeTraceCueIdx] || cues[0];
+    const topHits = activeCue.top_hits || [];
+
+    let hitsHtml = `
+        <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">
+            Top independent hits retrieved exclusively for <strong>${activeCue.modality.toUpperCase()} Cue</strong>: <em>"${activeCue.query_text}"</em>:
+        </div>
+        <div class="trace-hits-grid">
+    `;
+
+    topHits.forEach(h => {
+        const textTag = h.text_detected ? `<div class="trace-hit-text" title="${h.text_detected}">"${h.text_detected}"</div>` : "";
+        hitsHtml += `
+            <div class="trace-hit-card" onclick="seekToVideoMoment('${h.video_id}', ${h.timestamp_sec});">
+                <img src="${h.thumbnail_url}" class="trace-hit-thumb" loading="lazy" alt="Hit #${h.rank}">
+                <div class="trace-hit-header">
+                    <span class="trace-hit-rank">#${h.rank}</span>
+                    <span class="trace-hit-score">${Number(h.score).toFixed(4)}</span>
+                </div>
+                <div class="trace-hit-time"><strong>${h.video_id}</strong> @ ${Number(h.timestamp_sec).toFixed(1)}s</div>
+                ${textTag}
+            </div>
+        `;
+    });
+
+    hitsHtml += `</div>`;
+    traceCueBody.innerHTML = hitsHtml;
+}
+
+/**
+ * Helper: Seeks video player to moment and switches video if needed.
+ */
+async function seekToVideoMoment(videoId, timestampSec) {
+    if (videoId && videoId !== state.currentVideoId) {
+        videoSelect.value = videoId;
+        await loadVideo(videoId);
+    }
+    seekVideoTo(timestampSec);
+}
+
+/**
+ * Helper: Toggles cue evidence accordion for a candidate card.
+ */
+function toggleEvidenceBox(rank) {
+    const box = document.getElementById(`evidence-box-${rank}`);
+    if (box) {
+        const isHidden = box.style.display === "none";
+        box.style.display = isHidden ? "grid" : "none";
+    }
+}
+
+/**
+ * Executes Interactive Relevance Feedback via Rocchio.
+ */
+async function sendRelevanceFeedback(keyframeId, isPositive) {
+    if (!keyframeId) return;
+
+    if (isPositive) {
+        state.feedbackPositives.add(keyframeId);
+        state.feedbackNegatives.delete(keyframeId);
+    } else {
+        state.feedbackNegatives.add(keyframeId);
+        state.feedbackPositives.delete(keyframeId);
+    }
+
+    try {
+        const res = await fetch("/api/search/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                positive_keyframe_ids: Array.from(state.feedbackPositives),
+                negative_keyframe_ids: Array.from(state.feedbackNegatives),
+                original_query: queryInput.value.trim(),
+                top_k: 25,
+                video_id: state.currentVideoId
+            })
+        });
+
+        if (!res.ok) throw new Error("Feedback re-ranking failed");
+        const data = await res.json();
+        state.searchResults = data.candidates || [];
+        tabResultCount.textContent = state.searchResults.length;
+        renderCandidateCards();
+    } catch (err) {
+        console.error("Feedback error:", err);
     }
 }
 
@@ -587,37 +758,64 @@ function renderCandidateCards() {
             card.classList.add("active");
         }
 
-        // Rank badge styling
         let rankClass = "";
         if (c.rank === 1) rankClass = "top-1";
         else if (c.rank === 2) rankClass = "top-2";
         else if (c.rank === 3) rankClass = "top-3";
 
-        // Thumbnail element
         let thumbHtml = "";
         if (c.thumbnail_url) {
             thumbHtml = `<img src="${c.thumbnail_url}" alt="Rank ${c.rank}" loading="lazy">`;
         } else {
-            thumbHtml = `<span class="candidate-thumb-placeholder">Shot #${c.shot_id}</span>`;
+            thumbHtml = `<span class="candidate-thumb-placeholder">Shot #${c.shot_id || '0'}</span>`;
         }
 
-        // Type & Score badges
-        let typeClass = "keyframe";
-        let typeLabel = "Keyframe";
-        let scoreLabel = `Score: ${c.score.toFixed(4)}`;
+        const isConsensus = (c.matched_cues && c.matched_cues.length > 1);
+        const consensusBadge = isConsensus ? `<span class="candidate-consensus-badge">&#10024; Consensus (${c.matched_cues.length} Cues)</span>` : "";
 
-        if (c.is_ocr) {
-            typeClass = "ocr";
-            typeLabel = "OCR Text";
-            scoreLabel = `BM25: ${c.score.toFixed(2)}`;
-        } else if (c.is_shot_pooled) {
-            typeClass = "pooled";
-            typeLabel = "Shot Pooled";
+        let cuesBadgeHtml = "";
+        if (c.matched_cues && c.matched_cues.length > 0) {
+            cuesBadgeHtml = c.matched_cues.map(cueId => {
+                const isOcr = cueId.includes("ocr");
+                const cls = isOcr ? "ocr" : "visual";
+                const label = isOcr ? "OCR" : "VISUAL";
+                return `<span class="candidate-type-badge ${cls}">${label}</span>`;
+            }).join(" ");
+        } else {
+            cuesBadgeHtml = `<span class="candidate-type-badge keyframe">Moment</span>`;
         }
 
         let snippetHtml = "";
         if (c.text_detected) {
             snippetHtml = `<div class="candidate-text-snippet"><strong>[Detected Text]</strong> "${c.text_detected}"</div>`;
+        }
+
+        const evidenceEntries = Object.entries(c.cue_evidence || {});
+        let evidenceToggleBtn = "";
+        let evidenceBoxHtml = "";
+
+        if (evidenceEntries.length > 0) {
+            evidenceToggleBtn = `
+                <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); toggleEvidenceBox(${c.rank});">
+                    &#9660; Inspect Trigger Keyframes (${evidenceEntries.length})
+                </button>
+            `;
+
+            evidenceBoxHtml = `<div class="candidate-evidence-box" id="evidence-box-${c.rank}" style="display: none;">`;
+            evidenceEntries.forEach(([cueId, hit]) => {
+                const isOcr = cueId.includes("ocr");
+                const cueLabel = isOcr ? "OCR Cue" : "Visual Cue";
+                const textDetail = hit.text_detected ? `<div class="trace-hit-text" title="${hit.text_detected}">"${hit.text_detected}"</div>` : "";
+                evidenceBoxHtml += `
+                    <div class="evidence-item" onclick="event.stopPropagation(); seekToVideoMoment('${hit.video_id || c.video_id}', ${hit.timestamp_sec});">
+                        <img src="${hit.thumbnail_url || ''}" class="evidence-thumb" loading="lazy" alt="${hit.keyframe_id}">
+                        <div class="evidence-label">[${cueLabel}]: ${cueId}</div>
+                        <div class="evidence-time">${hit.keyframe_id} @ ${Number(hit.timestamp_sec).toFixed(1)}s (Score: ${Number(hit.score).toFixed(4)})</div>
+                        ${textDetail}
+                    </div>
+                `;
+            });
+            evidenceBoxHtml += `</div>`;
         }
 
         card.innerHTML = `
@@ -629,24 +827,28 @@ function renderCandidateCards() {
                 <div class="candidate-row-top">
                     <div class="candidate-title">
                         <span class="candidate-vid-badge">${c.video_id}</span>
-                        Shot #${String(c.shot_id).padStart(3, "0")}
+                        ${consensusBadge}
                     </div>
-                    <div class="candidate-score-pill">${scoreLabel}</div>
+                    <div class="candidate-score-pill">Score: ${Number(c.score).toFixed(4)}</div>
                 </div>
                 <div class="candidate-row-bottom">
-                    <div class="candidate-time">${c.formatted_time} <span style="color: var(--text-dim); font-size: 11px;">[${c.start_sec.toFixed(1)}s - ${c.end_sec.toFixed(1)}s]</span></div>
-                    <span class="candidate-type-badge ${typeClass}">${typeLabel}</span>
+                    <div class="candidate-time">${c.formatted_time} <span style="color: var(--text-dim); font-size: 11px;">[${Number(c.start_sec).toFixed(1)}s - ${Number(c.end_sec).toFixed(1)}s]</span></div>
+                    <div style="display: flex; gap: 4px;">${cuesBadgeHtml}</div>
                 </div>
                 ${snippetHtml}
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                    ${evidenceToggleBtn}
+                    <div class="candidate-feedback-actions" onclick="event.stopPropagation();">
+                        <button type="button" class="btn-feedback positive" onclick="sendRelevanceFeedback('${c.keyframe_id}', true)" title="Find similar moments with Rocchio">&#128077; Similar</button>
+                        <button type="button" class="btn-feedback negative" onclick="sendRelevanceFeedback('${c.keyframe_id}', false)" title="Suppress similar moments with Rocchio">&#128078; Exclude</button>
+                    </div>
+                </div>
+                ${evidenceBoxHtml}
             </div>
         `;
 
-        card.addEventListener("click", async () => {
-            if (c.video_id && c.video_id !== state.currentVideoId) {
-                videoSelect.value = c.video_id;
-                await loadVideo(c.video_id);
-            }
-            seekVideoTo(c.timestamp_sec);
+        card.addEventListener("click", () => {
+            seekToVideoMoment(c.video_id, c.start_sec);
             highlightCandidateCard(c.rank);
         });
 
@@ -674,8 +876,10 @@ function clearVisualSearch() {
     queryInput.value = "";
     btnClearQuery.style.display = "none";
     state.searchResults = [];
+    state.searchTrace = null;
     state.activeCandidateRank = null;
     tabResultCount.textContent = "0";
+    if (pipelineTracePanel) pipelineTracePanel.style.display = "none";
     switchTab("shots");
 }
 
@@ -715,21 +919,83 @@ function setupEventListeners() {
     btnJumpCenter.addEventListener("click", jumpCurrentCenter);
 
     // Modality toggle handlers
-    if (btnModeVisual && btnModeOcr) {
+    if (btnModeMultimodal) {
+        btnModeMultimodal.addEventListener("click", () => {
+            state.searchMode = "auto";
+            btnModeMultimodal.classList.add("active");
+            if (btnModeVisual) btnModeVisual.classList.remove("active");
+            if (btnModeOcr) btnModeOcr.classList.remove("active");
+            queryInput.placeholder = "Enter multi-cue query (e.g. 'v: news anchor | ocr: thoi su' or 'blue truck')...";
+            queryInput.focus();
+        });
+    }
+
+    if (btnModeVisual) {
         btnModeVisual.addEventListener("click", () => {
             state.searchMode = "visual";
             btnModeVisual.classList.add("active");
-            btnModeOcr.classList.remove("active");
+            if (btnModeMultimodal) btnModeMultimodal.classList.remove("active");
+            if (btnModeOcr) btnModeOcr.classList.remove("active");
             queryInput.placeholder = "Search visual scenes (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...";
             queryInput.focus();
         });
+    }
 
+    if (btnModeOcr) {
         btnModeOcr.addEventListener("click", () => {
             state.searchMode = "ocr";
             btnModeOcr.classList.add("active");
-            btnModeVisual.classList.remove("active");
+            if (btnModeMultimodal) btnModeMultimodal.classList.remove("active");
+            if (btnModeVisual) btnModeVisual.classList.remove("active");
             queryInput.placeholder = "Search on-screen text (e.g. 'hồ tiêu', 'tây nguyên', 'HTV', 'giá')...";
             queryInput.focus();
+        });
+    }
+
+    // Multi-Cue Builder Pills Handlers
+    if (btnAddVisualCue) {
+        btnAddVisualCue.addEventListener("click", () => {
+            const cur = queryInput.value.trim();
+            queryInput.value = cur ? `${cur} | v: ` : "v: ";
+            queryInput.focus();
+            btnClearQuery.style.display = "block";
+        });
+    }
+
+    if (btnAddOcrCue) {
+        btnAddOcrCue.addEventListener("click", () => {
+            const cur = queryInput.value.trim();
+            queryInput.value = cur ? `${cur} | ocr: ` : "ocr: ";
+            queryInput.focus();
+            btnClearQuery.style.display = "block";
+        });
+    }
+
+    if (btnAddSeqStage) {
+        btnAddSeqStage.addEventListener("click", () => {
+            const cur = queryInput.value.trim();
+            if (cur) {
+                queryInput.value = `${cur} >> `;
+                queryInput.focus();
+                btnClearQuery.style.display = "block";
+            }
+        });
+    }
+
+    if (btnClearPills) {
+        btnClearPills.addEventListener("click", () => {
+            queryInput.value = "";
+            btnClearQuery.style.display = "none";
+            queryInput.focus();
+        });
+    }
+
+    // Toggle Explainable Pipeline Trace Handler
+    if (btnToggleTrace && traceContent) {
+        btnToggleTrace.addEventListener("click", () => {
+            const isHidden = traceContent.style.display === "none";
+            traceContent.style.display = isHidden ? "flex" : "none";
+            btnToggleTrace.innerHTML = isHidden ? "&#9650; Hide Trace Details" : "&#9660; Inspect Per-Cue Hits &amp; Fusion";
         });
     }
 

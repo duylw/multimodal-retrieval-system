@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Task 06 & Task 06B)**
-* **Overall Progress:** `85%`
-* **Current Focus:** Completed Task 05 (Temporal Multimodal Fusion & Query Routing). Upgraded SQLite `ocr_fts` to keyframe-level aggregated documents (187,518 records), built multi-cue and sequence query parser (`v:`, `ocr:`, `>>`), implemented Max-Per-Cue Reciprocal Rank Fusion (RRF) inside 5s sliding windows, temporal NMS, and unified multimodal search engine with FastAPI endpoints. Ready for Task 06 (Web Interface & Multi-Cue Query Builder) and Task 06B (KIS Interactive Scrubber & DRES Live Submission).
+* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Task 06B)**
+* **Overall Progress:** `90%`
+* **Current Focus:** Completed Task 06 (Multimodal Search Web Application, Explainable Pipeline Inspector & Interactive Feedback). Implemented full transparency with per-cue candidate hits trace, candidate keyframe evidence accordions, Multi-Cue Builder toolbar, and real-time Rocchio feedback. Ready for Task 06B (KIS Interactive Scrubber & DRES Live Submission Console).
 
 ---
 
@@ -27,7 +27,7 @@
 | **Task 02C** | Visual DataLoader & SigLIP2-Base | Switch to SigLIP2-Base, PyTorch DataLoader num_workers=2, models/ D: drive centralization | **Completed** | [task-02c](file:///d:/UIT/TX/doan/tasks/task-02c-visual-performance-dataloader.md) | SigLIP2-Base DataLoader pipeline, `models/`, benchmark report |
 | **Task 04** | On-screen Text EasyOCR | Text keyframe detector, EasyOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-easyocr-guide.md` |
 | **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Completed** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py`, `multimodal-fusion-guide.md` |
-| **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
+| **Task 06** | Web Interface & Relevance Feedback | Explainable pipeline trace, per-cue hits breakdown, multi-cue builder, HTTP 206 video seeking, Rocchio feedback | **Completed** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `search_engine.py`, `debug_server.py`, `src/ui/static/`, `multimodal-search-ui-guide.md` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | Frame-accurate stepper, Mark In/Out range, interval preview, DRES live submit | **Pending** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css` |
 
 ---
@@ -55,8 +55,8 @@
   * [x] FastAPI REST endpoints (`/api/search/multimodal`) with VRAM unload lifecycle.
   * [x] Practical feature guide in [multimodal-fusion-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-fusion-guide.md).
 * [ ] **Milestone 4: Web Application Delivery & Thesis Defense**
-  * Search UI with timestamp-accurate video playback and relevance feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
-  * KIS Interactive Scrubber, Mark In/Out range selector, pre-submission preview, and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
+  * [x] Multimodal Search UI with Explainable Pipeline Inspector, Multi-Cue Builder, and Rocchio feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
+  * [ ] KIS Interactive Scrubber, Mark In/Out range selector, pre-submission preview, and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
   * Clean packaged codebase and thesis demonstration materials.
 
 ---
@@ -158,12 +158,20 @@
     * Added REST endpoints `GET /api/search/multimodal` and `POST /api/search/multimodal` to [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) with automated candidate formatting and thumbnail resolution.
     * Authored comprehensive feature documentation guide in [docs/guides/multimodal-fusion-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-fusion-guide.md).
     * Created unit test suite in [tests/test_retrieval.py](file:///d:/UIT/TX/doan/tests/test_retrieval.py) verifying all parser patterns, anti-double-counting, and consensus boost.
+  * Implemented and completed **[Task 06: Multimodal Search Web Application, Explainable Pipeline Inspector & Interactive Feedback](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)**:
+    * Implemented Explainable Multimodal Information Retrieval (XIR) with `search_with_trace` in [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py) capturing per-cue independent candidate hits (Top 10), latency breakdown, and sliding window consensus diagnostics.
+    * Added CLI flag `--trace` to `search_engine.py` displaying formatted step-by-step trace tables directly in the terminal.
+    * Upgraded [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) with `/api/search/multimodal` returning structured `trace` objects and implemented instant Rocchio Relevance Feedback (`POST /api/search/feedback`, < 50ms) using FAISS in-memory vector reconstruction (`index.reconstruct`).
+    * Built dynamic **Multi-Cue Query Builder** (`+ Visual (EN)`, `+ OCR (VI)`, `>> Sequence`) on the frontend ([src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js), [style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css)).
+    * Built collapsible **Pipeline Execution Trace & Per-Cue Inspector Panel** (`#pipelineTracePanel`) on the frontend with tabbed carousels showing individual candidate hits before fusion.
+    * Added **Inspect Trigger Keyframes & Cue Evidence** expandable accordion to every candidate moment card, with 1-click video seek and Rocchio feedback buttons (`👍 Similar`, `👎 Exclude`).
+    * Authored comprehensive feature guide in [docs/guides/multimodal-search-ui-guide.md](file:///d:/UIT/TX/doan/docs/guides/multimodal-search-ui-guide.md).
 
 ---
 
 ## 5. Next Action
-* **Implement [Task 06: Web Interface & Relevance Feedback](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) & [Task 06B: KIS Interactive Scrubber & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md):**
-  1. Build multi-cue interactive builder UI on the frontend (`src/ui/static/index.html`, `app.js`, `style.css`) allowing users to add/remove dynamic Visual and OCR cue pills, reorder stages, or use power-user query strings.
-  2. Implement KIS Interactive Scrubber with frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and Mark In (`I`) / Mark Out (`O`) range selectors.
-  3. Integrate 1-click live DRES API v2 submission connector with duplicate suppression and real-time score decay simulator.
+* **Implement [Task 06B: KIS Interactive Scrubber & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md):**
+  1. Add frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and keyboard hotkeys (`J`, `K`, `L`, `Space`) to the HTML5 video player.
+  2. Implement Mark In (`I`) and Mark Out (`O`) range selectors, boundary input fields, and interval preview player.
+  3. Integrate live DRES API v2 submission connector with duplicate suppression and real-time score decay simulator.
 

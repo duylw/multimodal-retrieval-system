@@ -98,7 +98,8 @@
             <!-- Search Bar & Modality Selector -->
             <div class="search-query-container">
                 <div class="search-modality-toggle">
-                    <button type="button" class="modality-btn active" id="btnModeVisual" data-mode="visual">&#128247; Visual Search (SigLIP2)</button>
+                    <button type="button" class="modality-btn active" id="btnModeMultimodal" data-mode="auto">&#10024; Hybrid Multi-Cue (Visual + OCR)</button>
+                    <button type="button" class="modality-btn" id="btnModeVisual" data-mode="visual">&#128247; Visual Only (SigLIP2)</button>
                     <button type="button" class="modality-btn" id="btnModeOcr" data-mode="ocr">&#128221; On-Screen Text (OCR FTS5)</button>
                     <div class="search-scope-wrap">
                         <label class="scope-checkbox-label">
@@ -107,10 +108,21 @@
                         </label>
                     </div>
                 </div>
+
+                <!-- Interactive Multi-Cue Builder Toolbar -->
+                <div class="multi-cue-builder" id="multiCueBuilder">
+                    <span class="builder-label">Compose Cues:</span>
+                    <button type="button" class="builder-pill-btn" id="btnAddVisualCue" title="Add English Visual description">+ Visual (EN)</button>
+                    <button type="button" class="builder-pill-btn" id="btnAddOcrCue" title="Add Vietnamese/Latin On-Screen Text">+ OCR Text (VI)</button>
+                    <button type="button" class="builder-pill-btn builder-pill-seq" id="btnAddSeqStage" title="Add chronological transition stage">&gt;&gt; Sequence</button>
+                    <button type="button" class="builder-clear-btn" id="btnClearPills" title="Reset all cues">Clear Cues</button>
+                </div>
+                <div class="cue-pills-list" id="cuePillsList" style="display: none;"></div>
+
                 <form id="searchForm" class="search-query-form" onsubmit="event.preventDefault();">
                     <div class="search-query-input-wrap">
                         <span class="search-query-icon">&#128269;</span>
-                        <input type="text" id="queryInput" placeholder="Search visual scenes (e.g. 'cận cảnh đĩa thức ăn', 'cooking food')...">
+                        <input type="text" id="queryInput" placeholder="Enter multi-cue query (e.g. 'v: news anchor | ocr: thoi su' or 'blue truck')...">
                         <button type="button" id="btnClearQuery" class="btn-clear-query" title="Clear query" style="display: none;">&#10005;</button>
                     </div>
                     <button type="submit" id="btnSearch" class="btn-search-submit">Search</button>
@@ -148,6 +160,22 @@
             <!-- Scrollable Cards Container for Shots -->
             <div class="shot-list" id="shotList">
                 <div class="loading-state" id="loadingState">Loading shot metadata and keyframes...</div>
+            </div>
+
+            <!-- Explainable Pipeline Trace & Per-Cue Inspector Panel -->
+            <div class="pipeline-trace-panel" id="pipelineTracePanel" style="display: none;">
+                <div class="trace-header" id="traceHeader">
+                    <div class="trace-title">
+                        <span class="trace-badge">&#9889; Pipeline Trace</span>
+                        <span class="trace-summary-text" id="traceSummaryText">Decomposed 2 Cues | Turnaround 115ms</span>
+                    </div>
+                    <button type="button" class="btn-toggle-trace" id="btnToggleTrace">&#9660; Inspect Per-Cue Hits &amp; Fusion</button>
+                </div>
+                <div class="trace-content" id="traceContent" style="display: none;">
+                    <div class="trace-stage-summary" id="traceStageSummary"></div>
+                    <div class="trace-cues-nav" id="traceCuesNav"></div>
+                    <div class="trace-cue-body" id="traceCueBody"></div>
+                </div>
             </div>
 
             <!-- Scrollable Cards Container for Ranked Search Candidates -->

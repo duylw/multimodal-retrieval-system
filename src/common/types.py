@@ -111,6 +111,7 @@ class CandidateMoment:
     keyframe_id: Optional[str] = None
     thumbnail_url: Optional[str] = None
     text_snippet: Optional[str] = None
+    cue_evidence: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass

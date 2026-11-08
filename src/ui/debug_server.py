@@ -249,13 +249,19 @@ def search_multimodal_endpoint(
     top_k: int = 25,
     video_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Unified Multimodal Search: Multi-Cue RRF fusion, 5s sliding window, and NMS."""
+    """Unified Multimodal Search: Multi-Cue RRF fusion, 5s sliding window, trace, and NMS."""
     if not query.strip():
         raise HTTPException(status_code=400, detail="Query string cannot be empty.")
 
     engine = get_search_engine()
     vid_filter = video_id.strip() if video_id and video_id.strip() else None
-    moments = engine.search(query=query.strip(), mode=mode, top_k=top_k, video_id=vid_filter)
+    moments, trace = engine.search_with_trace(
+        query=query.strip(),
+        mode=mode,
+        top_k=top_k,
+        video_id=vid_filter,
+        trace_top_hits=10
+    )
 
     results = []
     for rank, m in enumerate(moments, start=1):
@@ -276,6 +282,7 @@ def search_multimodal_endpoint(
             "keyframe_id": m.keyframe_id,
             "thumbnail_url": m.thumbnail_url,
             "text_detected": m.text_snippet,
+            "cue_evidence": m.cue_evidence,
             "is_multimodal": True
         })
 
@@ -283,7 +290,8 @@ def search_multimodal_endpoint(
         "query": query,
         "mode": mode,
         "total_results": len(results),
-        "candidates": results
+        "candidates": results,
+        "trace": trace
     }
 
 
@@ -294,10 +302,16 @@ def search_multimodal_post_endpoint(
     top_k: int = 25,
     video_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Structured Multi-Cue JSON search endpoint."""
+    """Structured Multi-Cue JSON search endpoint with execution trace."""
     engine = get_search_engine()
     vid_filter = video_id.strip() if video_id and video_id.strip() else None
-    moments = engine.search(query=payload, mode=mode, top_k=top_k, video_id=vid_filter)
+    moments, trace = engine.search_with_trace(
+        query=payload,
+        mode=mode,
+        top_k=top_k,
+        video_id=vid_filter,
+        trace_top_hits=10
+    )
 
     results = []
     for rank, m in enumerate(moments, start=1):
@@ -318,13 +332,131 @@ def search_multimodal_post_endpoint(
             "keyframe_id": m.keyframe_id,
             "thumbnail_url": m.thumbnail_url,
             "text_detected": m.text_snippet,
+            "cue_evidence": m.cue_evidence,
             "is_multimodal": True
         })
 
     return {
         "mode": mode,
         "total_results": len(results),
-        "candidates": results
+        "candidates": results,
+        "trace": trace
+    }
+
+
+@app.post("/api/search/feedback")
+def relevance_feedback_endpoint(
+    payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Rocchio Interactive Relevance Feedback:
+    Takes positive and negative keyframe IDs, computes Rocchio shifted vector,
+    and returns re-ranked candidate moments within 50ms without reloading neural networks.
+    """
+    pos_ids: List[str] = payload.get("positive_keyframe_ids", [])
+    neg_ids: List[str] = payload.get("negative_keyframe_ids", [])
+    orig_query: Optional[str] = payload.get("original_query", "")
+    top_k: int = int(payload.get("top_k", 25))
+    video_id: Optional[str] = payload.get("video_id")
+
+    if not pos_ids and not neg_ids and not orig_query:
+        raise HTTPException(status_code=400, detail="Must provide at least one feedback keyframe or query.")
+
+    engine = get_search_engine()
+    vec_idx = engine._ensure_vector_index()
+    extractor = engine._ensure_visual_extractor()
+
+    # Build reverse map if not cached
+    if not hasattr(vec_idx, "_kfid_to_int_id"):
+        vec_idx._kfid_to_int_id = {
+            meta.get("keyframe_id"): idx
+            for idx, meta in enumerate(vec_idx.id_to_metadata)
+            if meta.get("keyframe_id")
+        }
+
+    import numpy as np
+
+    if orig_query and orig_query.strip():
+        q_vec = extractor.extract_text_embedding(orig_query.strip())[0].astype(np.float32)
+    elif pos_ids and pos_ids[0] in vec_idx._kfid_to_int_id:
+        q_vec = vec_idx.index.reconstruct(vec_idx._kfid_to_int_id[pos_ids[0]]).astype(np.float32)
+    else:
+        raise HTTPException(status_code=400, detail="Cannot initialize query vector for feedback.")
+
+    alpha = 1.0
+    beta = 0.75
+    gamma = 0.25
+
+    pos_vecs = []
+    for pid in pos_ids:
+        if pid in vec_idx._kfid_to_int_id:
+            int_id = vec_idx._kfid_to_int_id[pid]
+            pos_vecs.append(vec_idx.index.reconstruct(int_id))
+
+    neg_vecs = []
+    for nid in neg_ids:
+        if nid in vec_idx._kfid_to_int_id:
+            int_id = vec_idx._kfid_to_int_id[nid]
+            neg_vecs.append(vec_idx.index.reconstruct(int_id))
+
+    rocchio_vec = alpha * q_vec
+    if pos_vecs:
+        rocchio_vec += beta * np.mean(pos_vecs, axis=0)
+    if neg_vecs:
+        rocchio_vec -= gamma * np.mean(neg_vecs, axis=0)
+
+    # L2 normalize
+    norm = float(np.linalg.norm(rocchio_vec))
+    if norm > 1e-6:
+        rocchio_vec = rocchio_vec / norm
+
+    # FAISS search
+    raw_hits = vec_idx.search(rocchio_vec.reshape(1, -1), top_k=engine.top_k_visual)
+    if video_id:
+        raw_hits = [h for h in raw_hits if h.get("video_id") == video_id]
+
+    cue_id = "feedback_v0"
+    cue_types = {cue_id: "visual"}
+    hits_by_cue = {cue_id: raw_hits}
+    weights = {"visual": 1.0, "ocr": 1.0}
+
+    moments = engine.fusor.fuse_and_nms(
+        stage_results=[hits_by_cue],
+        cue_types=cue_types,
+        weights=weights,
+        top_k=top_k
+    )
+    engine._decorate_moments(moments)
+
+    results = []
+    for rank, m in enumerate(moments, start=1):
+        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
+        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
+        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
+        results.append({
+            "rank": rank,
+            "score": m.score,
+            "video_id": m.video_id,
+            "start_sec": m.start_sec,
+            "end_sec": m.end_sec,
+            "start_ms": m.start_ms,
+            "end_ms": m.end_ms,
+            "formatted_time": time_str,
+            "matched_cues": m.matched_cues,
+            "keyframe_id": m.keyframe_id,
+            "thumbnail_url": m.thumbnail_url,
+            "text_detected": m.text_snippet,
+            "cue_evidence": m.cue_evidence,
+            "is_multimodal": True,
+            "is_feedback_rerank": True
+        })
+
+    return {
+        "status": "ok",
+        "total_results": len(results),
+        "candidates": results,
+        "positive_count": len(pos_vecs),
+        "negative_count": len(neg_vecs)
     }
 
 

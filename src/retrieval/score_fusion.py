@@ -141,7 +141,8 @@ class MaxPerCueRRFStrategy(FusionStrategy):
                 "score": final_score,
                 "matched_cues": list(cue_scores.keys()),
                 "k_matched": k_matched,
-                "best_hit": best_hit
+                "best_hit": best_hit,
+                "cue_hits": dict(win_data["best_hits"])
             })
 
         # Sort candidate windows descending by score
@@ -225,13 +226,20 @@ class TemporalMomentFusor:
                 # Must occur chronologically within sequence gap horizon
                 if 0.0 <= time_delta <= self.max_sequence_gap_sec:
                     seq_score = w1["score"] + w2["score"] + self.sequence_bonus
+                    merged_cue_hits = {}
+                    if "cue_hits" in w1:
+                        merged_cue_hits.update(w1["cue_hits"])
+                    if "cue_hits" in w2:
+                        merged_cue_hits.update(w2["cue_hits"])
+
                     linked_candidates.append({
                         "video_id": vid,
                         "start_sec": w1["start_sec"],
                         "end_sec": max(w1["end_sec"], w2["end_sec"]),
                         "score": seq_score,
                         "matched_cues": list(set(w1["matched_cues"] + w2["matched_cues"])),
-                        "best_hit": w1.get("best_hit") or w2.get("best_hit")
+                        "best_hit": w1.get("best_hit") or w2.get("best_hit"),
+                        "cue_hits": merged_cue_hits
                     })
                     found_link = True
 
@@ -277,6 +285,11 @@ class TemporalMomentFusor:
                             existing["start_sec"] = min(existing["start_sec"], cand["start_sec"])
                             existing["end_sec"] = max(existing["end_sec"], cand["end_sec"])
                             existing["matched_cues"] = list(set(existing["matched_cues"] + cand["matched_cues"]))
+                            if "cue_hits" in cand:
+                                existing.setdefault("cue_hits", {})
+                                for cid, chit in cand["cue_hits"].items():
+                                    if cid not in existing["cue_hits"]:
+                                        existing["cue_hits"][cid] = chit
                         suppress = True
                         break
 
@@ -305,7 +318,8 @@ class TemporalMomentFusor:
                 matched_cues=item.get("matched_cues", []),
                 keyframe_id=best_h.get("keyframe_id"),
                 thumbnail_url=best_h.get("thumbnail_url"),
-                text_snippet=best_h.get("text_detected")
+                text_snippet=best_h.get("text_detected"),
+                cue_evidence=item.get("cue_hits", {})
             ))
 
         return moments

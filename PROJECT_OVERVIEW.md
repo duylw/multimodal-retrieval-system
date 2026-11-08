@@ -117,6 +117,7 @@ d:/UIT/TX/doan/
 │       ├── visual-siglip-faiss.md
 │       ├── ocr-easyocr-guide.md
 │       ├── multimodal-fusion-guide.md
+│       ├── multimodal-search-ui-guide.md
 │       ├── submission-protocol-guide.md
 │       └── debug-ui-guide.md
 │

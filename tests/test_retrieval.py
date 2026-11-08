@@ -82,6 +82,30 @@ def test_score_fusion():
     print("[OK] Max-Per-Cue and Consensus Multiplier test passed!")
 
 
+def test_search_with_trace():
+    from src.retrieval.search_engine import SearchEngine
+
+    engine = SearchEngine()
+    try:
+        moments, trace = engine.search_with_trace(
+            query="ocr: trùng biển số",
+            mode="ocr",
+            top_k=5,
+            trace_top_hits=3
+        )
+        assert len(moments) > 0
+        assert "cues" in trace
+        assert len(trace["cues"]) == 1
+        assert trace["cues"][0]["modality"] == "ocr"
+        assert len(trace["cues"][0]["top_hits"]) > 0
+        assert moments[0].start_ms < moments[0].end_ms
+        assert len(moments[0].cue_evidence) > 0
+        print("[OK] Search with explainability trace test passed!")
+    finally:
+        engine.safe_unload()
+
+
 if __name__ == "__main__":
     test_query_parser()
     test_score_fusion()
+    test_search_with_trace()

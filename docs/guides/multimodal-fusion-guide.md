@@ -128,3 +128,4 @@ FAISS (Top 1500)        FAISS (Top 1500)        SQLite (Top 500)
 | `CUDA Out of Memory on GTX 1650` | GPU VRAM leaked or another model is running. | Call `engine.safe_unload()` or hit `POST /api/search/unload` to release VRAM. |
 | `Slow first query latency (~15s)` | Cold start loading SigLIP2 model weights from disk into GPU. | Expected behavior on initial invocation; subsequent queries execute in `< 150ms`. |
 | `Zero OCR matches on accented query` | Accented characters mistyped. | The hybrid OCR engine applies diacritic folding (`remove_diacritics 2` and `đ -> d`), so unaccented keywords match uniformly. |
+
