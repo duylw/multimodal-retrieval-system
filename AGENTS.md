@@ -16,6 +16,7 @@ Before writing code or performing tasks, the AI assistant **must check in order 
    * Multimodal fusion, sliding windows, RRF: Activate **`temporal-multimodal-fusion`** ([.agents/skills/temporal-multimodal-fusion/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/temporal-multimodal-fusion/SKILL.md)).
    * Fault tolerance, pipeline checkpoints, and rollback: Activate **`fault-tolerant-checkpointing`** ([.agents/skills/fault-tolerant-checkpointing/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/fault-tolerant-checkpointing/SKILL.md)).
    * Module layering, engine-runner separation, and CLI standards: Activate **`modular-code-architecture`** ([.agents/skills/modular-code-architecture/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/modular-code-architecture/SKILL.md)).
+   * Python clean code, typing, and IR design patterns: Activate **`clean-code-patterns`** ([.agents/skills/clean-code-patterns/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/clean-code-patterns/SKILL.md)).
    * Feature documentation & CLI guides: Activate **`feature-documentation-guide`** ([.agents/skills/feature-documentation-guide/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/feature-documentation-guide/SKILL.md)).
 4. **Reference Config & Schema:** Load parameters from [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml) and reuse interfaces/dataclasses in [src/common/](file:///d:/UIT/TX/doan/src/common).
 

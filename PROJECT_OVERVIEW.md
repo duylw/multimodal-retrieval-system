@@ -61,26 +61,26 @@ OFFLINE PHASE (DATA INGESTION, FEATURE CACHING & DECOUPLED INDEXING)
 
 
 ONLINE PHASE (QUERY UNDERSTANDING & TEMPORAL FUSION)
-[User Query: Natural Language OR Multi-Cue Composition (+Visual, +OCR)]
+[User Query: Multi-Cue Composition (+Visual in EN, +OCR in VI/EN, >> Sequence)]
         │
         ▼
-[Query Parser & Router] ── (Rule-based Routing / Power-User Prefix Parsing)
+[Query Parser & Router] ── (Rule-based Prefix & Sequence Parsing < 1ms)
         │
-        ├─► [Visual Cues (EN)] ──► FAISS SigLIP2 Multi-Vector Search (Top 200)
+        ├─► [Visual Cues (EN)] ──► FAISS SigLIP2 Multi-Vector Search (Top 1500 / cue)
         │
-        └─► [On-screen Text] ──► SQLite FTS5 + Fuzzy Search (Top 200)
-        │
-        ▼
-[Generalized Multi-Cue Reciprocal Rank Fusion (Multi-Cue RRF)]
+        └─► [On-screen Text]  ──► Keyframe-Aggregated SQLite FTS5 + Fuzzy (Top 500 / cue)
         │
         ▼
-[Temporal Fusion: 5-second Sliding Window]
+[Max-Per-Cue Reciprocal Rank Fusion (Multi-Cue RRF) & Consensus Multiplier]
+        │
+        ▼
+[Temporal Fusion: 5s Sliding Window (Max-Per-Cue) + Sequence Linker (>> 15s)]
         │
         ▼
 [Temporal Non-Maximum Suppression (NMS) & Final Ranking: [start_ms, end_ms]]
         │
         ▼
-[Web UI: Search Results + Range 206 Video Streaming + Relevance Feedback]
+[Web UI: Search Results + Range 206 Video Streaming + KIS Live Submission]
 ```
 
 ---
@@ -102,6 +102,7 @@ d:/UIT/TX/doan/
 │   └── skills/
 │       ├── fault-tolerant-checkpointing/  # Pre-flight guards, atomic rollbacks, idempotency
 │       ├── modular-code-architecture/     # 4-layer architecture, engine-runner separation
+│       ├── clean-code-patterns/           # Strict typing, docstrings, guard clauses, IR patterns
 │       ├── video-benchmark-eval/          # Ground truth benchmarks, Recall@K, MRR, IoU
 │       ├── vram-safe-embedding/           # GTX 1650 4GB VRAM safety, sequential staging
 │       ├── temporal-multimodal-fusion/    # RRF fusion, sliding windows, temporal NMS
