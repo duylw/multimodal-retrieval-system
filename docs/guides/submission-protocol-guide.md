@@ -251,11 +251,12 @@ uv run python -m src.submission.dres_client --session-id "<SESSION_TOKEN>" --eva
 
 ## 6. Integration with Search Web Interface
 
-In the upcoming search interface ([src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py)):
-1. **Candidate Card Quick Submit:** Each search candidate card displays a **"Submit to DRES"** button alongside video playback and keyframe inspection.
-2. **Pre-flight Confirmation:** Clicking submit displays a modal dialog with `Video ID`, `Start (ms)`, `End (ms)`, and the current elapsed time to prevent accidental clicks.
-3. **Response Banner:** Immediate visual feedback shows whether the server accepted the submission, rejected it as wrong, or rejected it as duplicate.
-4. **Estimated Score Calculator:** An on-screen widget computes real-time estimated scores using `calculate_kis_score()` based on elapsed query time and prior submission attempts.
+In the upcoming interactive submission interface defined in [task-06b-kis-interactive-submission.md](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) ([src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py)):
+1. **Interactive Scrubber & Range Selector:** Provides frame-accurate steppers (`[-5s]`, `[-1s]`, `[-frame]`, `[+frame]`, `[+1s]`, `[+5s]`) and Mark In (`I`) / Mark Out (`O`) buttons to pinpoint exact moment bounds.
+2. **Pre-submission Preview Player:** A `[▶ Play Range]` button plays exclusively within `[start_sec, end_sec]` so contestants verify the event before submission.
+3. **1-Click DRES Submission:** Each card or range selector triggers immediate submission with integer milliseconds and extension-stripped video IDs.
+4. **Duplicate Protection & Response Banner:** Immediate visual feedback shows whether the server accepted the submission, rejected it as wrong, or suppressed it as duplicate.
+5. **Real-time Score Decay Calculator:** An on-screen widget computes real-time estimated scores using `calculate_kis_score()` based on elapsed query time and prior submission attempts.
 
 ---
 

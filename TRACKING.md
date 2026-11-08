@@ -28,6 +28,7 @@
 | **Task 04** | On-screen Text EasyOCR | Text keyframe detector, EasyOCR on CPU, SQLite FTS5 | **Completed** | [task-04](file:///d:/UIT/TX/doan/tasks/task-04-ocr-easyocr.md) | `ocr.py`, `run_ocr.py`, SQLite `ocr_fts` virtual table, `ocr-easyocr-guide.md` |
 | **Task 05** | Multimodal Fusion & Temporal NMS | Query router, RRF score normalization, 5s sliding window | **Ready** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `search_engine.py` |
 | **Task 06** | Web Interface & Relevance Feedback | FastAPI search API, Range 206 video stream, Rocchio feedback | **Pending** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `app.py`, `src/ui/static/` |
+| **Task 06B** | KIS Scrubber & DRES Live Submission | Frame-accurate stepper, Mark In/Out range, interval preview, DRES live submit | **Pending** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css` |
 
 ---
 
@@ -50,7 +51,8 @@
   * Sliding window score aggregation (5s) and Reciprocal Rank Fusion (RRF) between Visual and OCR channels.
   * Ablation study tables measuring incremental contributions across Visual Only, Text Only, and Full Fusion.
 * [ ] **Milestone 4: Web Application Delivery & Thesis Defense**
-  * Search UI with timestamp-accurate video playback and relevance feedback.
+  * Search UI with timestamp-accurate video playback and relevance feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
+  * KIS Interactive Scrubber, Mark In/Out range selector, pre-submission preview, and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
   * Clean packaged codebase and thesis demonstration materials.
 
 ---
@@ -125,6 +127,13 @@
     * Documented comprehensive operational guide in [docs/guides/submission-protocol-guide.md](file:///d:/UIT/TX/doan/docs/guides/submission-protocol-guide.md) covering Textual KIS (5 min window, progressive hints), Video KIS (4 min window, <= 20s clip), mathematical scoring schedule (50 pts accuracy with -10 per wrong attempt, 50 pts time decaying linearly to 0), and trade-off optimization analysis.
     * Added DRES submission dataclasses to [src/common/types.py](file:///d:/UIT/TX/doan/src/common/types.py) (`DRESAnswer`, `DRESAnswerSet`, `DRESSubmissionPayload`).
     * Built standardized DRES API v2 client and CLI utility in [src/submission/dres_client.py](file:///d:/UIT/TX/doan/src/submission/dres_client.py) with automated payload formatting (integer milliseconds, video ID extension stripping) and duplicate submission prevention cache.
+* **Nov 08, 2026:**
+  * Formulated **[Task 06B: KIS Interactive Scrubber & DRES Live Submission Console](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)**:
+    * Defined human-in-the-loop temporal refinement workflow bridging search candidate keyframes with exact ground truth submission intervals.
+    * Specified frame-accurate stepper controls (`[-5s]`, `[-1s]`, `[-0.04s]`, `[+0.04s]`, `[+1s]`, `[+5s]`) and keyboard hotkeys (`J`, `L`, arrow keys, `Space`).
+    * Designed Mark In (`I`) and Mark Out (`O`) range selection, quick presets (shot bounds, +-2.5s window), and pre-submission range preview player.
+    * Outlined 1-click live DRES API submission connector with duplicate suppression and real-time score decay simulator.
+
 
 
 ---

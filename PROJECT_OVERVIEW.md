@@ -127,7 +127,8 @@ d:/UIT/TX/doan/
 │   ├── task-02c-visual-performance-dataloader.md
 │   ├── task-04-ocr-easyocr.md
 │   ├── task-05-temporal-fusion.md
-│   └── task-06-ui-and-feedback.md
+│   ├── task-06-ui-and-feedback.md
+│   └── task-06b-kis-interactive-submission.md
 │
 ├── configs/                   # System configuration files
 │   └── default_config.yaml    # Storage paths, shot thresholds, model IDs, batch sizes
