@@ -1261,6 +1261,13 @@ async function refreshDresStatus() {
         const res = await fetch("/api/dres/status");
         if (!res.ok) return;
         const data = await res.json();
+        if (inputDresUrl && data.base_url) inputDresUrl.value = data.base_url;
+        if (inputDresEvalId && data.evaluation_id) inputDresEvalId.value = data.evaluation_id;
+        if (inputDresSession && data.session_id) inputDresSession.value = data.session_id;
+        if (data.is_authenticated && chkDresDryRun && chkDresDryRun.checked) {
+            // Suggest unchecking dry-run if authenticated
+            chkDresDryRun.checked = false;
+        }
         const hist = data.history || [];
         if (hist.length === 0) {
             dresHistoryList.textContent = "No submissions yet.";

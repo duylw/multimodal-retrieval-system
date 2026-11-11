@@ -701,17 +701,37 @@ def get_db_summary() -> Dict[str, Any]:
 # Task 06B: Temporal Context Filmstrip & DRES Live Submission Endpoints
 # =========================================================================
 
+def _load_env_file() -> None:
+    """Loads environment variables from local .env file if present."""
+    env_file = Path(".env")
+    if env_file.exists():
+        try:
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+        except Exception:
+            pass
+
+_load_env_file()
+
 _dres_client: Optional[Any] = None
-_dres_eval_id: str = "offline_kis_eval"
+_dres_eval_id: str = os.environ.get("DRES_EVAL_ID", "offline_kis_eval")
 _dres_history: List[Dict[str, Any]] = []
 
 
 def get_dres_client() -> Any:
     """Lazy-initializes DRESClient singleton."""
-    global _dres_client
+    global _dres_client, _dres_eval_id
     if _dres_client is None:
         from src.submission.dres_client import DRESClient
-        _dres_client = DRESClient()
+        base_url = os.environ.get("DRES_BASE_URL", "https://eventretrieval.one")
+        session_id = os.environ.get("DRES_SESSION_ID")
+        eval_id = os.environ.get("DRES_EVAL_ID")
+        if eval_id:
+            _dres_eval_id = eval_id
+        _dres_client = DRESClient(base_url=base_url, session_id=session_id)
     return _dres_client
 
 
