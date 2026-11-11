@@ -942,7 +942,7 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[ERROR] Live DRES submission failed: {e}")
-        raise HTTPException(status_code=502, detail=f"DRES server error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # Mount static files and root SPA route

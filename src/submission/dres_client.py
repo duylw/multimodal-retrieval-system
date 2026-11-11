@@ -239,7 +239,16 @@ class DRESClient:
 
         try:
             resp = requests.post(url, json=payload, params=params, headers=headers, timeout=timeout)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                err_detail = resp.text
+                try:
+                    err_json = resp.json()
+                    err_detail = err_json.get("description") or err_json.get("message") or resp.text
+                except Exception:
+                    pass
+                logger.error(f"[ERROR] DRES rejected submission (HTTP {resp.status_code}): {err_detail}")
+                raise RuntimeError(f"DRES Error ({resp.status_code}): {err_detail}")
+
             result = resp.json() if resp.text else {"status": "SUCCESS", "http_status": resp.status_code}
             self._submitted_cache.add(cache_key)
             logger.info(f"[OK] DRES submission response: {result}")
