@@ -24,6 +24,42 @@ def fold_vietnamese(text: str) -> str:
     return unaccented.replace("đ", "d").replace("Đ", "D").lower().strip()
 
 
+def expand_ocr_terms(raw_query: str) -> List[str]:
+    """
+    Expands OCR query into comprehensive lexical tokens for FTS5 & fuzzy search:
+    1. Preserves original words (accented Vietnamese).
+    2. Adds diacritic-folded unaccented forms (e.g. 'kế hoạch' -> 'ke hoach').
+    3. Splits alphanumeric boundaries (e.g. 'HTV9' -> 'HTV', '9', '51B' -> '51', 'B').
+    4. Normalizes punctuation.
+    """
+    terms: List[str] = []
+    seen: set = set()
+    clean_q = raw_query.replace('"', '""').replace("đ", "d").replace("Đ", "D")
+    for word in clean_q.split():
+        clean_w = word.strip('"\'.,:;!?()[]{}<>-')
+        if not clean_w:
+            continue
+        if clean_w not in seen:
+            seen.add(clean_w)
+            terms.append(clean_w)
+        folded = fold_vietnamese(clean_w)
+        if folded and folded not in seen:
+            seen.add(folded)
+            terms.append(folded)
+        # Split letter/digit transitions (HTV9 -> HTV, 9; 51B -> 51, B)
+        sub_tokens = re.findall(r"[a-zA-ZÀ-ỹ]+|\d+", clean_w)
+        if len(sub_tokens) > 1:
+            for st in sub_tokens:
+                if (len(st) >= 2 or st.isdigit()) and st not in seen:
+                    seen.add(st)
+                    terms.append(st)
+                st_folded = fold_vietnamese(st)
+                if st_folded and st_folded not in seen:
+                    seen.add(st_folded)
+                    terms.append(st_folded)
+    return terms
+
+
 class MetadataDB:
     """Manages SQLite storage for video catalog, shots, keyframes, and pipeline checkpoints."""
 
@@ -489,7 +525,13 @@ class MetadataDB:
 
         # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
         clean_query = raw_query.replace('"', '""').replace('đ', 'd').replace('Đ', 'D')
-        terms = [t for t in clean_query.split() if t]
+        
+        # Expand query into multi-format lexical tokens (accented, unaccented, alphanumeric sub-tokens)
+        expanded_tokens = expand_ocr_terms(raw_query)
+        # Keep tokens with len >= 2 or digits to prevent noisy single-character FTS matching
+        terms = [t for t in expanded_tokens if len(t) >= 2 or t.isdigit()]
+        if not terms:
+            terms = [t for t in clean_query.split() if t]
         if not terms:
             return []
 
@@ -532,12 +574,49 @@ class MetadataDB:
                 cursor = conn.execute(sql, tuple(params))
                 rows = [dict(r) for r in cursor.fetchall()]
 
+        # Substring LIKE fallback: if FTS returned few results or missed compound/hyphenated tokens
+        if len(rows) < pool_limit:
+            seen_ocr_ids = {r["ocr_id"] for r in rows}
+            like_candidates_to_try = [raw_query.strip()]
+            for t in terms:
+                if len(t) >= 3 and t not in like_candidates_to_try:
+                    like_candidates_to_try.append(t)
+
+            with self._get_connection() as conn:
+                for term in like_candidates_to_try[:4]:
+                    remaining = pool_limit - len(rows)
+                    if remaining <= 0:
+                        break
+                    like_sql = f"""
+                        SELECT ocr_id, video_id, keyframe_id, timestamp_sec, text_detected, 1.5 AS bm25_score
+                        FROM ocr_records
+                        WHERE text_detected LIKE ?
+                        {("AND video_id = ?" if video_id else "")}
+                        LIMIT ?;
+                    """
+                    like_params = [f"%{term}%"]
+                    if video_id:
+                        like_params.append(video_id)
+                    like_params.append(min(100, remaining))
+
+                    try:
+                        for r in conn.execute(like_sql, tuple(like_params)).fetchall():
+                            rd = dict(r)
+                            if rd["ocr_id"] not in seen_ocr_ids:
+                                seen_ocr_ids.add(rd["ocr_id"])
+                                rows.append(rd)
+                    except Exception as e:
+                        logger.warning(f"[WARNING] Substring LIKE fallback query failed: {e}")
+
         if not rows:
             return []
 
         # Stage 2: Fine-Grained Token-Level Fuzzy Rescoring
         folded_query = fold_vietnamese(raw_query)
-        query_words = [w for w in folded_query.split() if w]
+        # Extract word and sub-token boundaries for robust alignment
+        query_words = [w for w in re.findall(r"[a-z0-9]+", folded_query) if w]
+        spaceless_query = folded_query.replace(" ", "")
+
         max_bm25 = max((r.get("bm25_score", 1.0) for r in rows), default=1.0)
         if max_bm25 <= 0.0:
             max_bm25 = 1.0
@@ -545,7 +624,8 @@ class MetadataDB:
         for r in rows:
             text_detected = r.get("text_detected", "")
             folded_text = fold_vietnamese(text_detected)
-            cand_words = [w for w in folded_text.split() if w]
+            cand_words = [w for w in re.findall(r"[a-z0-9]+", folded_text) if w]
+            spaceless_text = folded_text.replace(" ", "")
 
             # Word-level alignment similarity: for each query word, find best matching word in candidate text
             if query_words and cand_words:
@@ -557,12 +637,14 @@ class MetadataDB:
             else:
                 word_score = 0.0
 
-            # Substring bonus: exact or near phrase inclusion
+            # Substring bonus: exact, spaceless, or near phrase inclusion
             sub_bonus = 0.0
             if folded_query in folded_text:
-                sub_bonus = 0.25
+                sub_bonus = 0.35
+            elif len(spaceless_query) >= 3 and spaceless_query in spaceless_text:
+                sub_bonus = 0.30
             elif len(folded_query) >= 4 and SequenceMatcher(None, folded_query, folded_text).ratio() >= 0.75:
-                sub_bonus = 0.15
+                sub_bonus = 0.20
 
             fuzzy_score = min(word_score + sub_bonus, 1.0)
             norm_bm25 = r.get("bm25_score", 0.0) / max_bm25

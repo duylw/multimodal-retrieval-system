@@ -254,7 +254,7 @@ def get_search_engine() -> Any:
 def search_multimodal_endpoint(
     query: str,
     mode: str = "auto",
-    top_k: int = 25,
+    top_k: int = 100,
     video_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """Unified Multimodal Search: Multi-Cue RRF fusion, 5s sliding window, trace, and NMS."""
@@ -307,7 +307,7 @@ def search_multimodal_endpoint(
 def search_multimodal_post_endpoint(
     payload: Dict[str, Any],
     mode: str = "auto",
-    top_k: int = 25,
+    top_k: int = 100,
     video_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """Structured Multi-Cue JSON search endpoint with execution trace."""
@@ -364,7 +364,7 @@ def relevance_feedback_endpoint(
     pos_ids: List[str] = payload.get("positive_keyframe_ids", [])
     neg_ids: List[str] = payload.get("negative_keyframe_ids", [])
     orig_query: Optional[str] = payload.get("original_query", "")
-    top_k: int = int(payload.get("top_k", 25))
+    top_k: int = int(payload.get("top_k", 100))
     video_id: Optional[str] = payload.get("video_id")
 
     if not pos_ids and not neg_ids and not orig_query:
@@ -472,7 +472,7 @@ def relevance_feedback_endpoint(
 def search_visual(
     query: str,
     video_id: Optional[str] = None,
-    top_k: int = 20,
+    top_k: int = 50,
     dedup: bool = True,
 ) -> Dict[str, Any]:
     """Searches visual index using natural language text query via SigLIP2."""
@@ -584,7 +584,7 @@ def search_visual(
 def search_ocr_endpoint(
     query: str,
     video_id: Optional[str] = None,
-    top_k: int = 25,
+    top_k: int = 100,
 ) -> Dict[str, Any]:
     """Searches on-screen text using SQLite FTS5 with BM25 ranking."""
     if not query.strip():

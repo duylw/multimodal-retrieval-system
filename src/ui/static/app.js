@@ -26,6 +26,7 @@ let state = {
     kisTimerInterval: null,
     kisWrongAttempts: 0,
     kisTaskLimitSec: 300,
+    candidateViewMode: "grid",
 };
 
 // DOM Elements
@@ -49,6 +50,12 @@ const chkAutoScroll = document.getElementById("chkAutoScroll");
 const btnPrevShot = document.getElementById("btnPrevShot");
 const btnNextShot = document.getElementById("btnNextShot");
 const btnJumpCenter = document.getElementById("btnJumpCenter");
+
+const candidateControlsBar = document.getElementById("candidateControlsBar");
+const btnViewGrid = document.getElementById("btnViewGrid");
+const btnViewList = document.getElementById("btnViewList");
+const selectTopK = document.getElementById("selectTopK");
+const candidateStatsText = document.getElementById("candidateStatsText");
 
 // Task 06B Scrubber & KIS Console DOM Elements
 const btnStepBack5s = document.getElementById("btnStepBack5s");
@@ -538,7 +545,13 @@ function switchTab(tabName) {
 
     shotControls.style.display = tabName === "shots" ? "flex" : "none";
     shotList.style.display = tabName === "shots" ? "flex" : "none";
-    candidateList.style.display = tabName === "results" ? "flex" : "none";
+    if (tabName === "results") {
+        candidateList.style.display = state.candidateViewMode === "grid" ? "grid" : "flex";
+        if (candidateControlsBar) candidateControlsBar.style.display = "flex";
+    } else {
+        candidateList.style.display = "none";
+        if (candidateControlsBar) candidateControlsBar.style.display = "none";
+    }
     if (pipelineTracePanel) pipelineTracePanel.style.display = (tabName === "results" && state.searchTrace) ? "block" : "none";
     if (checkpointPane) checkpointPane.style.display = tabName === "checkpoints" ? "flex" : "none";
 
@@ -648,7 +661,8 @@ async function executeSearch() {
     try {
         const scopeCurrent = document.getElementById("chkCurrentVideoOnly")?.checked;
         const vidParam = (scopeCurrent && state.currentVideoId) ? `&video_id=${encodeURIComponent(state.currentVideoId)}` : "";
-        const endpoint = `/api/search/multimodal?query=${encodeURIComponent(query)}&mode=${encodeURIComponent(mode)}${vidParam}&top_k=25`;
+        const chosenTopK = selectTopK ? (parseInt(selectTopK.value, 10) || 100) : 100;
+        const endpoint = `/api/search/multimodal?query=${encodeURIComponent(query)}&mode=${encodeURIComponent(mode)}${vidParam}&top_k=${chosenTopK}`;
         const res = await fetch(endpoint);
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
@@ -872,6 +886,7 @@ async function sendRelevanceFeedback(keyframeId, isPositive) {
 
     try {
         const scopeCurrent = document.getElementById("chkCurrentVideoOnly")?.checked;
+        const chosenTopK = selectTopK ? (parseInt(selectTopK.value, 10) || 100) : 100;
         const res = await fetch("/api/search/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -879,7 +894,7 @@ async function sendRelevanceFeedback(keyframeId, isPositive) {
                 positive_keyframe_ids: Array.from(state.feedbackPositives),
                 negative_keyframe_ids: Array.from(state.feedbackNegatives),
                 original_query: queryInput.value.trim(),
-                top_k: 25,
+                top_k: chosenTopK,
                 video_id: scopeCurrent ? state.currentVideoId : null
             })
         });
@@ -900,6 +915,7 @@ async function sendRelevanceFeedback(keyframeId, isPositive) {
 function renderCandidateCards() {
     if (state.searchResults.length === 0) {
         candidateList.innerHTML = '<div class="empty-candidate-state">No matching moments found for this query.</div>';
+        if (candidateStatsText) candidateStatsText.textContent = "0 moments";
         return;
     }
 
@@ -907,6 +923,20 @@ function renderCandidateCards() {
     const items = filterDres
         ? state.searchResults.filter(c => ACTIVE_DRES_BATCHES.has((c.video_id || "").substring(0, 3)))
         : state.searchResults;
+
+    if (candidateControlsBar) {
+        candidateControlsBar.style.display = "flex";
+    }
+
+    if (candidateStatsText) {
+        const total = state.searchResults.length;
+        const shown = items.length;
+        if (filterDres && total !== shown) {
+            candidateStatsText.textContent = `Showing ${shown} DRES candidates (${total - shown} filtered)`;
+        } else {
+            candidateStatsText.textContent = `Showing ${shown} candidates`;
+        }
+    }
 
     if (items.length === 0) {
         candidateList.innerHTML = '<div class="empty-candidate-state">No matching moments found within active DRES batches (L01-L12, L21-L23). Try unchecking "DRES Batches Only" or adjusting your query.</div>';
@@ -1008,23 +1038,25 @@ function renderCandidateCards() {
                     <div style="display: flex; gap: 4px;">${cuesBadgeHtml}</div>
                 </div>
                 ${snippetHtml}
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
-                    <div style="display: flex; gap: 4px; align-items: center;">
-                        ${evidenceToggleBtn}
-                        <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); toggleCandidateFilmstrip(${c.rank}, '${c.video_id}', ${centerSec});" title="Inspect +-15s neighbor keyframes without loading video">
-                            [Filmstrip +-15s]
-                        </button>
-                        <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); filterSearchToVideo('${c.video_id}');" title="Restrict search to this video">
-                            [Only ${c.video_id}]
-                        </button>
+                <div class="candidate-actions-bar">
+                    <div class="candidate-secondary-actions">
+                        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                            ${evidenceToggleBtn}
+                            <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); toggleCandidateFilmstrip(${c.rank}, '${c.video_id}', ${centerSec});" title="Inspect +-15s neighbor keyframes without loading video">
+                                [Filmstrip +-15s]
+                            </button>
+                            <button type="button" class="btn-evidence-toggle" onclick="event.stopPropagation(); filterSearchToVideo('${c.video_id}');" title="Restrict search to this video">
+                                [Only ${c.video_id}]
+                            </button>
+                        </div>
+                        <div class="candidate-feedback-actions" onclick="event.stopPropagation();">
+                            <button type="button" class="btn-feedback positive" onclick="sendRelevanceFeedback('${c.keyframe_id}', true)" title="Find visually similar frames with Rocchio">[+ Sim]</button>
+                            <button type="button" class="btn-feedback negative" onclick="sendRelevanceFeedback('${c.keyframe_id}', false)" title="Suppress similar frames with Rocchio">[- Exc]</button>
+                        </div>
                     </div>
-                    <div class="candidate-feedback-actions" onclick="event.stopPropagation();">
-                        <button type="button" class="btn-feedback positive" onclick="sendRelevanceFeedback('${c.keyframe_id}', true)" title="Find visually similar frames with Rocchio">[+ Similar]</button>
-                        <button type="button" class="btn-feedback negative" onclick="sendRelevanceFeedback('${c.keyframe_id}', false)" title="Suppress similar frames with Rocchio">[- Exclude]</button>
-                        <button type="button" class="btn-card-quick-submit" onclick="submitKisMoment('${c.video_id}', ${Number(c.start_sec)}, ${Number(c.end_sec)});" title="Immediately submit this candidate interval to DRES">
-                            [Submit KIS]
-                        </button>
-                    </div>
+                    <button type="button" class="btn-card-quick-submit" onclick="submitKisMoment('${c.video_id}', ${Number(c.start_sec)}, ${Number(c.end_sec)});" title="Immediately submit this candidate interval to DRES">
+                        [Submit KIS: ${c.video_id} ${Number(c.start_sec).toFixed(1)}s - ${Number(c.end_sec).toFixed(1)}s]
+                    </button>
                 </div>
                 ${evidenceBoxHtml}
                 <div class="candidate-filmstrip-box" id="filmstrip-box-${c.rank}" style="display: none;" onclick="event.stopPropagation();"></div>
@@ -1694,6 +1726,37 @@ function setupEventListeners() {
     if (chkDresBatchesOnly) {
         chkDresBatchesOnly.addEventListener("change", () => {
             renderCandidateCards();
+        });
+    }
+
+    // Grid / List View Toggle Handlers
+    if (btnViewGrid && btnViewList) {
+        btnViewGrid.addEventListener("click", () => {
+            state.candidateViewMode = "grid";
+            btnViewGrid.classList.add("active");
+            btnViewList.classList.remove("active");
+            candidateList.classList.add("grid-view");
+            if (state.activeTab === "results") {
+                candidateList.style.display = "grid";
+            }
+        });
+        btnViewList.addEventListener("click", () => {
+            state.candidateViewMode = "list";
+            btnViewList.classList.add("active");
+            btnViewGrid.classList.remove("active");
+            candidateList.classList.remove("grid-view");
+            if (state.activeTab === "results") {
+                candidateList.style.display = "flex";
+            }
+        });
+    }
+
+    // Top-K results limit change handler
+    if (selectTopK) {
+        selectTopK.addEventListener("change", () => {
+            if (queryInput.value.trim() && state.searchResults.length > 0) {
+                executeSearch();
+            }
         });
     }
 

@@ -88,7 +88,7 @@ class SearchEngine:
         self,
         query: Union[str, Dict[str, Any], ParsedMultiCueQuery],
         mode: str = "auto",
-        top_k: int = 25,
+        top_k: int = 50,
         video_id: Optional[str] = None
     ) -> List[CandidateMoment]:
         """
@@ -97,7 +97,7 @@ class SearchEngine:
         Args:
             query: Query string, dictionary payload, or ParsedMultiCueQuery.
             mode: Search mode ('auto', 'visual', or 'ocr').
-            top_k: Number of moments to retrieve (default 25).
+            top_k: Number of moments to retrieve (default 50).
             video_id: Optional video ID filter to restrict search to one video.
 
         Returns:
@@ -116,7 +116,7 @@ class SearchEngine:
         self,
         query: Union[str, Dict[str, Any], ParsedMultiCueQuery],
         mode: str = "auto",
-        top_k: int = 25,
+        top_k: int = 50,
         video_id: Optional[str] = None,
         trace_top_hits: int = 10
     ) -> Tuple[List[CandidateMoment], Dict[str, Any]]:

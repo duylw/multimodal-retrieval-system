@@ -292,8 +292,26 @@
                 </div>
             </div>
 
+            <!-- Candidate Controls Bar: Grid/List View switcher & Top-K selector -->
+            <div class="candidate-controls-bar" id="candidateControlsBar" style="display: none;">
+                <div class="candidate-view-toggle">
+                    <button type="button" class="candidate-view-btn active" id="btnViewGrid" title="Grid View: Multi-column grid for rapid visual scanning & 1-click submit">[Grid View]</button>
+                    <button type="button" class="candidate-view-btn" id="btnViewList" title="List View: Detailed horizontal row format">[List View]</button>
+                </div>
+                <div class="candidate-topk-wrap">
+                    <label for="selectTopK" class="candidate-topk-label">Results:</label>
+                    <select id="selectTopK" class="candidate-topk-select" title="Number of candidate moments to retrieve">
+                        <option value="25">25 Moments</option>
+                        <option value="50">50 Moments</option>
+                        <option value="100" selected>100 Moments</option>
+                        <option value="200">200 Moments</option>
+                    </select>
+                </div>
+                <div class="candidate-stats-text" id="candidateStatsText">0 moments</div>
+            </div>
+
             <!-- Scrollable Cards Container for Ranked Search Candidates -->
-            <div class="candidate-list" id="candidateList" style="display: none;">
+            <div class="candidate-list grid-view" id="candidateList" style="display: none;">
                 <div class="empty-candidate-state" id="emptyCandidateState">Enter a natural language query above and click Search to retrieve top-ranked moments.</div>
             </div>
 

@@ -191,7 +191,7 @@ class TemporalMomentFusor:
         stage_results: List[Dict[str, List[Dict[str, Any]]]],
         cue_types: Dict[str, str],
         weights: Dict[str, float],
-        top_k: int = 25
+        top_k: int = 50
     ) -> List[CandidateMoment]:
         """
         Full fusion pipeline:
@@ -275,7 +275,7 @@ class TemporalMomentFusor:
     def _apply_temporal_nms(
         self,
         candidates: List[Dict[str, Any]],
-        top_k: int = 25
+        top_k: int = 50
     ) -> List[CandidateMoment]:
         """
         Suppresses overlapping lower-ranked windows per video and converts into CandidateMoments.
