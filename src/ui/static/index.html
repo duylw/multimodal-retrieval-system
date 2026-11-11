@@ -164,11 +164,14 @@
                                 <input type="checkbox" id="chkDresDryRun" checked>
                                 <span>Dry-Run Mode (Safe local testing without live server)</span>
                             </label>
-                            <input type="text" id="inputDresUrl" placeholder="DRES Base URL (https://eventretrieval.one)" value="https://eventretrieval.one" class="dres-input">
+                            <input type="text" id="inputDresUrl" placeholder="DRES Base URL (e.g. https://eventretrieval.one)" value="https://eventretrieval.one" class="dres-input">
+                            <input type="text" id="inputDresUsername" placeholder="DRES Username" class="dres-input">
+                            <input type="password" id="inputDresPassword" placeholder="DRES Password" class="dres-input">
+                            <button type="button" class="kis-mark-btn" id="btnLoginDres" title="Authenticate with DRES server and discover active evaluation">[Login &amp; Sync Eval]</button>
                             <input type="text" id="inputDresEvalId" placeholder="Evaluation ID (e.g. offline_kis_eval)" value="offline_kis_eval" class="dres-input">
-                            <input type="text" id="inputDresSession" placeholder="Session ID Token (optional if Dry-Run)" class="dres-input">
-                            <button type="button" class="kis-mark-btn" id="btnSaveDresConfig">[Save Session]</button>
-                            <button type="button" class="kis-preset-btn" id="btnClearDresCache">[Clear Duplicate Cache]</button>
+                            <input type="text" id="inputDresSession" placeholder="Session ID Token (auto-filled on login)" class="dres-input">
+                            <button type="button" class="kis-mark-btn" id="btnSaveDresConfig" title="Save custom session token and evaluation ID">[Save Session]</button>
+                            <button type="button" class="kis-preset-btn" id="btnClearDresCache" title="Clear duplicate cache for new task">[Clear Duplicate Cache]</button>
                         </div>
                         <div class="dres-history-box" id="dresHistoryBox">
                             <div class="dres-history-title">Recent Submissions in Current Query:</div>

@@ -81,6 +81,9 @@ const btnToggleDresConfig = document.getElementById("btnToggleDresConfig");
 const kisDresConfigDrawer = document.getElementById("kisDresConfigDrawer");
 const chkDresDryRun = document.getElementById("chkDresDryRun");
 const inputDresUrl = document.getElementById("inputDresUrl");
+const inputDresUsername = document.getElementById("inputDresUsername");
+const inputDresPassword = document.getElementById("inputDresPassword");
+const btnLoginDres = document.getElementById("btnLoginDres");
 const inputDresEvalId = document.getElementById("inputDresEvalId");
 const inputDresSession = document.getElementById("inputDresSession");
 const btnSaveDresConfig = document.getElementById("btnSaveDresConfig");
@@ -1422,6 +1425,44 @@ function setupEventListeners() {
             const isHidden = kisDresConfigDrawer.style.display === "none";
             kisDresConfigDrawer.style.display = isHidden ? "block" : "none";
             if (isHidden) refreshDresStatus();
+        });
+    }
+    if (btnLoginDres) {
+        btnLoginDres.addEventListener("click", async () => {
+            const username = inputDresUsername ? inputDresUsername.value.trim() : "";
+            const password = inputDresPassword ? inputDresPassword.value.trim() : "";
+            const baseUrl = inputDresUrl ? inputDresUrl.value.trim() : "";
+            if (!username || !password) {
+                showKisToast("[WARNING] Please enter both Username and Password.", "warn");
+                return;
+            }
+            try {
+                showKisToast("[INFO] Authenticating with DRES server...", "info");
+                const res = await fetch("/api/dres/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        base_url: baseUrl,
+                        username: username,
+                        password: password
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || "Authentication failed");
+                }
+                if (data.session_id) {
+                    if (inputDresSession) inputDresSession.value = data.session_id;
+                    if (inputDresEvalId && data.evaluation_id) inputDresEvalId.value = data.evaluation_id;
+                    if (chkDresDryRun) chkDresDryRun.checked = false;
+                    showKisToast(`[OK] Logged in to DRES! Eval ID: ${data.evaluation_id}`, "ok");
+                    refreshDresStatus();
+                } else {
+                    showKisToast("[WARNING] Login finished but no Session ID returned.", "warn");
+                }
+            } catch (err) {
+                showKisToast(`[ERROR] DRES Login Failed: ${err.message}`, "err");
+            }
         });
     }
     if (btnSaveDresConfig) {

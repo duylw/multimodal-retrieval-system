@@ -142,7 +142,7 @@ class DRESClient:
             resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
-            sid = data.get("sessionId")
+            sid = data.get("sessionId") or data.get("session") or data.get("id")
             if not sid:
                 raise ValueError(f"No sessionId returned in response: {data}")
             self.session_id = sid
@@ -176,15 +176,20 @@ class DRESClient:
 
     def get_active_evaluation(self, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
         """
-        Find the first evaluation with status 'ACTIVE'.
-        Returns None if no active evaluation is found.
+        Find the first evaluation with status 'ACTIVE', 'RUNNING', or 'OPEN'.
+        Falls back to the first available evaluation in the list if none match.
         """
         evaluations = self.get_evaluation_list(timeout=timeout)
         for ev in evaluations:
-            if ev.get("status", "").upper() == "ACTIVE":
+            status = str(ev.get("status", "")).upper()
+            if status in ["ACTIVE", "RUNNING", "OPEN"]:
                 logger.info(f"[OK] Found active evaluation: id={ev.get('id')}, name={ev.get('name')}")
                 return ev
-        logger.warning("[WARNING] No ACTIVE evaluation found on server.")
+        if evaluations:
+            first_ev = evaluations[0]
+            logger.info(f"[INFO] Using first available evaluation: id={first_ev.get('id')}, name={first_ev.get('name')}")
+            return first_ev
+        logger.warning("[WARNING] No evaluation found on server.")
         return None
 
     def submit_kis(
