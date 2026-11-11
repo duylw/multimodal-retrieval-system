@@ -112,6 +112,10 @@ const btnAddNegVisualCue = document.getElementById("btnAddNegVisualCue");
 const btnAddOcrCue = document.getElementById("btnAddOcrCue");
 const btnAddSeqStage = document.getElementById("btnAddSeqStage");
 const btnClearPills = document.getElementById("btnClearPills");
+const chkDresBatchesOnly = document.getElementById("chkDresBatchesOnly");
+const ACTIVE_DRES_BATCHES = new Set([
+    "L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "L11", "L12", "L21", "L22", "L23"
+]);
 const pipelineTracePanel = document.getElementById("pipelineTracePanel");
 const traceSummaryText = document.getElementById("traceSummaryText");
 const btnToggleTrace = document.getElementById("btnToggleTrace");
@@ -899,9 +903,19 @@ function renderCandidateCards() {
         return;
     }
 
+    const filterDres = chkDresBatchesOnly ? chkDresBatchesOnly.checked : false;
+    const items = filterDres
+        ? state.searchResults.filter(c => ACTIVE_DRES_BATCHES.has((c.video_id || "").substring(0, 3)))
+        : state.searchResults;
+
+    if (items.length === 0) {
+        candidateList.innerHTML = '<div class="empty-candidate-state">No matching moments found within active DRES batches (L01-L12, L21-L23). Try unchecking "DRES Batches Only" or adjusting your query.</div>';
+        return;
+    }
+
     candidateList.innerHTML = "";
 
-    state.searchResults.forEach(c => {
+    items.forEach((c, displayIdx) => {
         const card = document.createElement("div");
         card.className = "candidate-card";
         card.id = `candidate-${c.rank}`;
@@ -924,6 +938,10 @@ function renderCandidateCards() {
         const isConsensus = (c.matched_cues && c.matched_cues.length > 1);
         const consensusBadge = isConsensus ? `<span class="candidate-consensus-badge">[Consensus: ${c.matched_cues.length} Cues]</span>` : "";
 
+        const batch = (c.video_id || "").substring(0, 3);
+        const inDres = ACTIVE_DRES_BATCHES.has(batch);
+        const dresBadge = inDres ? "" : `<span class="candidate-type-badge" style="background:#7f1d1d; color:#fca5a5; border:1px solid #ef4444;" title="This video is NOT in the active DRES evaluation collection!">[NOT IN DRES]</span>`;
+
         let cuesBadgeHtml = "";
         if (c.matched_cues && c.matched_cues.length > 0) {
             cuesBadgeHtml = c.matched_cues.map(cueId => {
@@ -935,6 +953,7 @@ function renderCandidateCards() {
         } else {
             cuesBadgeHtml = `<span class="candidate-type-badge keyframe">Moment</span>`;
         }
+        if (dresBadge) cuesBadgeHtml += " " + dresBadge;
 
         let snippetHtml = "";
         if (c.text_detected) {
@@ -1206,6 +1225,12 @@ async function submitKisMoment(videoId, startSec, endSec) {
 
     const dryRun = chkDresDryRun ? chkDresDryRun.checked : true;
     const evalId = inputDresEvalId ? inputDresEvalId.value.trim() : "offline_kis_eval";
+
+    const batch = (videoId || "").substring(0, 3);
+    if (!dryRun && !ACTIVE_DRES_BATCHES.has(batch)) {
+        showKisToast(`[ERROR] Video ${videoId} (Batch ${batch}) does not exist in DRES evaluation collection! Active batches: L01-L12, L21-L23.`, "err");
+        return;
+    }
 
     try {
         const res = await fetch("/api/dres/submit", {
@@ -1663,6 +1688,12 @@ function setupEventListeners() {
             queryInput.value = "";
             btnClearQuery.style.display = "none";
             queryInput.focus();
+        });
+    }
+
+    if (chkDresBatchesOnly) {
+        chkDresBatchesOnly.addEventListener("change", () => {
+            renderCandidateCards();
         });
     }
 
