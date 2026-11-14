@@ -1,5 +1,14 @@
 # Task 06D: Automated Query Translation & Ergonomic Competition Accelerators
 
+**Status:** `[DONE]` Completed
+**Target Milestone:** Milestone 4 Extension
+**Server Component:** [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) (Port 8001)
+**Frontend Client:** [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition)
+**Unit Tests:** [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py)
+**Documentation:** [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md)
+
+---
+
 ## 1. Objectives (What)
 * Equip the KIS Competition Workstation with **High-Speed Automated Query Translation (Google Translate)**:
   * Enable contestants to type natural Vietnamese queries (e.g., `xe buyt mau xanh chay qua nga tu | ocr: 51B`) and have the visual descriptions automatically translated into English (`a blue bus driving through an intersection | ocr: 51B`) to match SigLIP2's English WebLI training distribution, while preserving Vietnamese OCR tokens intact for SQLite FTS5.

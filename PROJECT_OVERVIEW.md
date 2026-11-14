@@ -184,9 +184,13 @@ d:/UIT/TX/doan/
 │   │
 │   └── ui/                    # User interface & developer inspection services
 │       ├── __init__.py
-│       ├── debug_server.py    # FastAPI server (HTTP 206 video stream, visual search, monitor)
-│       ├── app.py             # Production search web application
-│       └── static/            # Frontend SPA assets (HTML5, modern CSS, vanilla JS)
+│       ├── debug_server.py    # FastAPI server on port 8000 (debug inspector, checkpoints, monitor)
+│       ├── competition_server.py # Dedicated KIS competition server on port 8001 (high-density, low-latency)
+│       ├── competition/       # KIS Competition Workstation frontend SPA assets
+│       │   ├── index.html
+│       │   ├── style.css
+│       │   └── app.js
+│       └── static/            # Debug inspector frontend SPA assets
 │           ├── index.html
 │           ├── style.css
 │           └── app.js

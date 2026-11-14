@@ -143,6 +143,17 @@ Implement the instant pop-up inspection player in `src/ui/competition/`:
   * DRES submission turnaround via client proxy: `< 200ms`.
 * **Deliverables:**
   * [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py)
-  * `src/ui/competition/index.html`
-  * `src/ui/competition/style.css`
-  * `src/ui/competition/app.js`
+  * [src/ui/competition/index.html](file:///d:/UIT/TX/doan/src/ui/competition/index.html)
+  * [src/ui/competition/style.css](file:///d:/UIT/TX/doan/src/ui/competition/style.css)
+  * [src/ui/competition/app.js](file:///d:/UIT/TX/doan/src/ui/competition/app.js)
+  * [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md)
+
+---
+
+## 5. Verification & Acceptance
+* [x] **Status:** `COMPLETED` (Nov 14, 2026)
+* [x] Dedicated FastAPI competition server running on port `8001` completely separate from developer debug server (`8000`).
+* [x] Dual-zone layout with persistent Left KIS Command Center Drawer + Right High-Density Frame Grid displaying 12-20 moments simultaneously.
+* [x] Interactive Modal Video Inspector auto-seeked on thumbnail click, with full stepper controls (`[-5s]`, `[-1s]`, `[-1f]`, `[+1f]`, `[+1s]`, `[+5s]`), Mark In/Out, range preview, and single-hand hotkeys (`Space`, `J`, `L`, `Left/Right`, `I`, `O`, `S`).
+* [x] Direct 1-click `[Submit KIS]` button on every candidate card, plus duplicate prevention cache and live score decay simulation.
+

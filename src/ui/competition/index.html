@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KIS Competition Workstation | UIT Multimodal Retrieval</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark">
+
+  <!-- TOP APP BAR -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo-badge">KIS</div>
+      <div class="brand-text">
+        <h1 class="brand-title">Competition Workstation</h1>
+        <span class="brand-subtitle">UIT Multimodal Video Moment Retrieval</span>
+      </div>
+    </div>
+
+    <!-- Center Search Bar -->
+    <div class="header-search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon-badge">Q</span>
+        <input 
+          type="text" 
+          id="queryInput" 
+          class="search-input" 
+          placeholder="Enter query in Vietnamese (e.g. xe buyt mau xanh | ocr: 51B) or multi-cue..." 
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button id="translateQueryBtn" class="btn-translate-query" title="Translate Vietnamese visual cues to English (VI ➜ EN)">VI➜EN</button>
+        <button id="clearQueryBtn" class="btn-clear-query" title="Clear query (Esc)">X</button>
+      </div>
+
+      <div class="search-controls-bar">
+        <div class="search-mode-selector">
+          <label class="mode-pill active"><input type="radio" name="searchMode" value="auto" checked> Hybrid</label>
+          <label class="mode-pill"><input type="radio" name="searchMode" value="visual"> Visual</label>
+          <label class="mode-pill"><input type="radio" name="searchMode" value="ocr"> OCR</label>
+        </div>
+
+        <div class="search-filters">
+          <label class="filter-checkbox" title="Auto-translate Vietnamese visual descriptions into English on search">
+            <input type="checkbox" id="autoTranslateCheck" checked>
+            <span>Auto VI➜EN</span>
+          </label>
+          <label class="filter-checkbox" title="Filter candidate videos to official competition batches (L01-L24)">
+            <input type="checkbox" id="dresBatchesOnly" checked>
+            <span>DRES Batches</span>
+          </label>
+          <label class="filter-checkbox" title="Restrict search exclusively to active video ID">
+            <input type="checkbox" id="targetVideoOnly">
+            <span id="targetVideoFilterLabel">This Video</span>
+          </label>
+        </div>
+
+        <div class="results-limit-selector" title="Maximum candidate moments to retrieve">
+          <select id="resultsLimitSelect" class="limit-select">
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+            <option value="300" selected>300</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+          </select>
+        </div>
+
+        <button id="searchBtn" class="btn-primary-search" title="Execute multimodal search (Enter)">
+          <span class="btn-search-icon">🔍</span>
+          <span class="btn-search-text">Search</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Header Actions -->
+    <div class="header-actions">
+      <div id="dresConnectionPill" class="dres-status-pill dry-run" title="DRES Client Connection Status">
+        <span class="pill-dot"></span>
+        <span id="dresStatusText">DRY-RUN</span>
+      </div>
+
+      <button id="toggleDresSettingsBtn" class="btn-header-secondary" title="Configure DRES server credentials">
+        DRES Config
+      </button>
+
+      <button id="toggleDockedLayoutBtn" class="btn-header-secondary" title="Toggle between floating pop-up player and docked split view">
+        Layout: <span id="layoutModeLabel">Popup</span>
+      </button>
+
+      <button id="unloadVramBtn" class="btn-header-danger" title="Unload SigLIP2 model from GPU memory">
+        Free VRAM
+      </button>
+    </div>
+  </header>
+
+  <!-- DRES CONFIG DRAWER (COLLAPSIBLE OVERLAY) -->
+  <div id="dresSettingsDrawer" class="dres-settings-drawer hidden">
+    <div class="drawer-header">
+      <h3 class="drawer-title">DRES API v2 Configuration</h3>
+      <button id="closeDresDrawerBtn" class="btn-close-drawer">X</button>
+    </div>
+    <div class="drawer-body">
+      <div class="form-group">
+        <label for="dresBaseUrl">DRES Server Base URL</label>
+        <input type="text" id="dresBaseUrl" value="https://eventretrieval.one" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="dresEvalId">Active Evaluation ID</label>
+        <input type="text" id="dresEvalId" value="offline_kis_eval" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="dresSessionId">Session Token (Optional)</label>
+        <input type="text" id="dresSessionId" placeholder="Paste session ID or login below" class="form-input">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="dresUsername">Username</label>
+          <input type="text" id="dresUsername" placeholder="e.g. team06" class="form-input">
+        </div>
+        <div class="form-group">
+          <label for="dresPassword">Password</label>
+          <input type="password" id="dresPassword" placeholder="••••••••" class="form-input">
+        </div>
+      </div>
+      <div class="drawer-actions">
+        <button id="saveDresConfigBtn" class="btn-save-dres">Connect / Login</button>
+        <button id="clearDresCacheBtn" class="btn-clear-cache" title="Clear local duplicate submission cache">Clear Round Cache</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN WORKSTATION WORKSPACE (DUAL-ZONE LAYOUT) -->
+  <main class="workstation-workspace" id="workstationWorkspace">
+
+    <!-- LEFT DOCKED SIDEBAR: KIS COMMAND CENTER -->
+    <aside class="kis-command-sidebar" id="kisCommandSidebar">
+
+      <!-- SECTION 1: STOPWATCH & SCORE SIMULATOR -->
+      <section class="sidebar-card competition-stopwatch-card">
+        <div class="card-header">
+          <span class="section-tag">COMPETITION TIMER</span>
+          <div class="task-mode-toggle">
+            <button id="taskModeTextual" class="btn-task-mode active" title="Textual KIS (5 min limit)">Text (300s)</button>
+            <button id="taskModeVideo" class="btn-task-mode" title="Video KIS (4 min limit)">Video (240s)</button>
+          </div>
+        </div>
+
+        <div class="stopwatch-display">
+          <div class="digital-clock" id="stopwatchClock">00:00</div>
+          <div class="clock-limit-label">Limit: <span id="clockLimitLabel">05:00</span></div>
+        </div>
+
+        <div class="stopwatch-controls">
+          <button id="timerStartPauseBtn" class="btn-timer-primary">Start Timer</button>
+          <button id="timerResetBtn" class="btn-timer-secondary">Reset</button>
+        </div>
+
+        <!-- Score Decay Simulator -->
+        <div class="score-decay-box">
+          <div class="score-decay-header">
+            <span class="score-label">PREDICTED SCORE</span>
+            <span class="score-total" id="predictedTotalScore">100.0 pts</span>
+          </div>
+          <div class="score-breakdown">
+            <div class="breakdown-item">
+              <span class="breakdown-title">Accuracy:</span>
+              <span class="breakdown-val" id="predictedAccScore">50.0 pts</span>
+            </div>
+            <div class="breakdown-item">
+              <span class="breakdown-title">Time Bonus:</span>
+              <span class="breakdown-val" id="predictedTimeScore">50.0 pts</span>
+            </div>
+            <div class="breakdown-item">
+              <span class="breakdown-title">Wrong Hits:</span>
+              <span class="breakdown-val highlight-danger" id="wrongAttemptsCounter">0</span>
+            </div>
+          </div>
+          <div class="wrong-attempt-actions">
+            <button id="addWrongAttemptBtn" class="btn-wrong-add">+1 Wrong (-10 pts)</button>
+            <button id="resetWrongAttemptsBtn" class="btn-wrong-reset">Reset Wrong</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: ACTIVE SUBMISSION TARGET -->
+      <section class="sidebar-card submission-target-card">
+        <div class="card-header">
+          <span class="section-tag">TARGET COORDINATES</span>
+          <span class="target-status-badge" id="targetStatusBadge">No Target Selected</span>
+        </div>
+
+        <div class="target-details-grid">
+          <div class="target-field">
+            <span class="field-label">VIDEO ID</span>
+            <input type="text" id="targetVideoId" class="target-input" placeholder="e.g. L05_V014" spellcheck="false">
+          </div>
+          <div class="target-field">
+            <span class="field-label">DURATION</span>
+            <span class="target-value duration" id="targetDurationVal">0.00s</span>
+          </div>
+          <div class="target-field">
+            <span class="field-label">START (SEC)</span>
+            <input type="number" id="targetStartSec" class="target-input-num" step="0.04" min="0" value="0.00">
+          </div>
+          <div class="target-field">
+            <span class="field-label">END (SEC)</span>
+            <input type="number" id="targetEndSec" class="target-input-num" step="0.04" min="0" value="0.00">
+          </div>
+        </div>
+
+        <div class="target-ms-preview">
+          Bounds: <span class="ms-code" id="targetMsBounds">0ms - 0ms</span>
+        </div>
+
+        <!-- Presets -->
+        <div class="preset-buttons-row">
+          <button id="presetTightBtn" class="btn-preset" title="Tight 1.0s window (+-0.5s around center)">Tight +-0.5s</button>
+          <button id="presetShotBtn" class="btn-preset" title="Exact detected shot interval">Shot Bounds</button>
+          <button id="presetWindowBtn" class="btn-preset" title="Standard 5.0s window (+-2.5s around center)">Window +-2.5s</button>
+        </div>
+
+        <!-- Submission Options -->
+        <div class="submission-options-row">
+          <label class="sub-checkbox">
+            <input type="checkbox" id="subDryRunCheck">
+            <span>Dry-run simulation</span>
+          </label>
+          <label class="sub-checkbox">
+            <input type="checkbox" id="subAllowDuplicateCheck">
+            <span>Allow duplicate</span>
+          </label>
+        </div>
+
+        <!-- Primary Submission Action -->
+        <div class="submission-actions">
+          <button id="submitTargetRangeBtn" class="btn-submit-primary">
+            <span class="btn-icon">🚀</span>
+            <span class="btn-title">SUBMIT TARGET RANGE</span>
+          </button>
+          <button id="quickSubmitPlayheadBtn" class="btn-submit-secondary" title="Submit playhead +-0.5s (Hotkey S)">
+            <span class="btn-icon">⚡</span>
+            <span>SUBMIT PLAYHEAD +-0.5s (S)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- SECTION 3: REAL-TIME SUBMISSION STREAM -->
+      <section class="sidebar-card submission-history-card">
+        <div class="card-header">
+          <span class="section-tag">SUBMISSION STREAM</span>
+          <span class="history-count-badge" id="historyCountBadge">0 submissions</span>
+        </div>
+        <div class="submission-history-feed" id="submissionHistoryFeed">
+          <div class="history-empty-placeholder">No submissions recorded in this session.</div>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- RIGHT MAIN CANVAS: HIGH-DENSITY FRAME GRID -->
+    <section class="candidate-canvas-main" id="candidateCanvasMain">
+
+      <!-- Task 06D: Query Accelerators Bar (History Chips & Translation Diff Banner) -->
+      <div class="query-accelerators-bar" id="queryAcceleratorsBar">
+        <div class="history-chips-container" id="historyChipsContainer">
+          <span class="history-chips-label">Recent:</span>
+          <div class="history-chips-scroll" id="historyChipsScroll">
+            <!-- Dynamic query history chips injected here -->
+          </div>
+          <button id="clearQueryHistoryBtn" class="btn-clear-history" title="Clear query history">Clear</button>
+        </div>
+
+        <div class="translation-diff-banner hidden" id="translationDiffBanner">
+          <div class="diff-badge">VI ➜ EN</div>
+          <div class="diff-content">
+            <span class="diff-original" id="diffOriginalText" title="Original Query"></span>
+            <span class="diff-arrow">➜</span>
+            <span class="diff-translated" id="diffTranslatedText" title="Translated Query (SigLIP2 + FTS5)"></span>
+          </div>
+          <div class="diff-actions">
+            <button id="diffRevertBtn" class="btn-diff-action" title="Revert to original query">Revert</button>
+            <button id="diffDismissBtn" class="btn-diff-close" title="Dismiss banner">X</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas Sub-Header / Metrics -->
+      <div class="canvas-controls-header">
+        <div class="canvas-stats">
+          <span class="stats-label">CANDIDATE MOMENTS:</span>
+          <span class="stats-count" id="candidateTotalCount">0</span>
+          <span class="stats-divider">|</span>
+          <span class="stats-query-echo" id="candidateQueryEcho">Ready for query</span>
+        </div>
+
+        <div class="canvas-view-tools">
+          <span class="density-label">Grid View: High Density</span>
+          <button id="clearAllCandidatesBtn" class="btn-tool-secondary">Clear Results</button>
+        </div>
+      </div>
+
+      <!-- Candidate Frame Grid (Top-to-Bottom, Left-to-Right) -->
+      <div class="candidate-grid" id="candidateGrid">
+        <!-- Candidate Cards will be injected dynamically here -->
+        <div class="grid-empty-state">
+          <div class="empty-icon">📺</div>
+          <h3>KIS Competition Workstation Ready</h3>
+          <p>Enter a query in the top search bar (e.g. <code>v: blue truck | ocr: 51B</code>) or press <code>/</code> to focus.</p>
+        </div>
+      </div>
+
+      <!-- Loading Overlay -->
+      <div id="gridLoadingOverlay" class="grid-loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Retrieving and fusing multimodal candidates...</div>
+      </div>
+
+    </section>
+
+    <!-- DOCKED PLAYER PANEL (PINNED MODE) -->
+    <div id="dockedPlayerPanel" class="docked-player-panel hidden">
+      <div class="docked-player-header">
+        <span class="docked-title" id="dockedPlayerTitle">Video Player</span>
+        <button id="closeDockedPlayerBtn" class="btn-close-docked">X</button>
+      </div>
+      <div class="docked-player-container" id="dockedPlayerContainer">
+        <!-- Video element dynamically moved here in docked mode -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- INTERACTIVE MODAL VIDEO INSPECTOR & POP-UP PLAYER -->
+  <div id="videoModal" class="video-modal-backdrop hidden">
+    <div class="video-modal-window">
+
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-badge-video" id="modalVideoIdBadge">L00_V000</span>
+          <h2 class="modal-heading" id="modalHeading">Video Inspector</h2>
+          <span class="modal-time-indicator" id="modalTimeIndicator">00:00.00 / 00:00.00</span>
+        </div>
+        <div class="modal-header-actions">
+          <button id="modalDockToggleBtn" class="btn-modal-action" title="Pin to docked panel">Dock Player</button>
+          <button id="modalCloseBtn" class="btn-modal-close" title="Close modal (Esc)">X</button>
+        </div>
+      </div>
+
+      <!-- Modal Body / Player -->
+      <div class="modal-body" id="modalBody">
+        <div class="video-player-wrapper" id="playerWrapper">
+          <video 
+            id="modalVideoPlayer" 
+            class="modal-video-element" 
+            controls="false"
+            preload="metadata"
+            playsinline
+          ></video>
+          <div id="playerBufferingOverlay" class="player-buffering-indicator hidden">Buffering...</div>
+        </div>
+
+        <!-- Video Transport Timeline & Scrub Controls -->
+        <div class="player-transport-bar" id="playerTransportBar">
+          <div class="transport-scrubber-wrapper">
+            <input type="range" id="videoTimelineSlider" class="timeline-slider" min="0" max="100" step="0.04" value="0">
+            <div class="timeline-range-highlight" id="timelineRangeHighlight"></div>
+          </div>
+
+          <div class="transport-controls-row">
+            <!-- Steppers -->
+            <div class="steppers-group">
+              <button id="stepBack5s" class="btn-stepper" title="Back 5 seconds">[-5s]</button>
+              <button id="stepBack1s" class="btn-stepper" title="Back 1 second (J)">[-1s]</button>
+              <button id="stepBackFrame" class="btn-stepper" title="Back 1 frame (40ms, Left Arrow)">[-1f]</button>
+              <button id="modalPlayPauseBtn" class="btn-stepper-play" title="Play / Pause (Space)">▶ Play</button>
+              <button id="stepFwdFrame" class="btn-stepper" title="Forward 1 frame (40ms, Right Arrow)">[+1f]</button>
+              <button id="stepFwd1s" class="btn-stepper" title="Forward 1 second (L)">[+1s]</button>
+              <button id="stepFwd5s" class="btn-stepper" title="Forward 5 seconds">[+5s]</button>
+            </div>
+
+            <!-- Mark In / Out Controls -->
+            <div class="mark-controls-group">
+              <button id="setMarkInBtn" class="btn-mark" title="Set Mark In (I)">Set In (I): <span id="markInVal">0.00s</span></button>
+              <button id="setMarkOutBtn" class="btn-mark" title="Set Mark Out (O)">Set Out (O): <span id="markOutVal">0.00s</span></button>
+              <button id="playRangePreviewBtn" class="btn-preview-range" title="Loop or preview exact selected range">Play Range</button>
+            </div>
+
+            <!-- Modal Submission Buttons -->
+            <div class="modal-submit-group">
+              <button id="modalSubmitRangeBtn" class="btn-modal-submit-range" title="Submit Mark In - Mark Out to DRES">
+                Submit Range
+              </button>
+              <button id="modalSubmitPlayheadBtn" class="btn-modal-submit-playhead" title="Submit playhead +-0.5s (Hotkey S)">
+                Submit Playhead (S)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Temporal Context Filmstrip Drawer (+-15s) -->
+        <div class="modal-filmstrip-section" id="modalFilmstripSection">
+          <div class="filmstrip-header">
+            <span class="filmstrip-title">TEMPORAL CONTEXT FILMSTRIP (+-15s Neighbor Keyframes)</span>
+            <span class="filmstrip-status" id="filmstripStatus">Loading neighbor frames...</span>
+          </div>
+          <div class="filmstrip-carousel" id="filmstripCarousel">
+            <!-- Filmstrip cards loaded dynamically -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer / Hotkey Legend -->
+      <div class="modal-footer">
+        <div class="hotkey-legend">
+          <span class="legend-item"><kbd>Space</kbd> Play/Pause</span>
+          <span class="legend-item"><kbd>J</kbd>/<kbd>L</kbd> Seek 1s</span>
+          <span class="legend-item"><kbd>←</kbd>/<kbd>→</kbd> Seek 1 Frame</span>
+          <span class="legend-item"><kbd>I</kbd> Mark In</span>
+          <span class="legend-item"><kbd>O</kbd> Mark Out</span>
+          <span class="legend-item"><kbd>S</kbd> 1-Click Submit</span>
+          <span class="legend-item"><kbd>Esc</kbd> Close</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

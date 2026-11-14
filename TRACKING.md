@@ -10,8 +10,8 @@
 ## 1. Overall Status
 
 * **Current Stage:** **Milestone 4 Extension: Dedicated KIS Competition Workstation & Ergonomic Accelerators**
-* **Overall Progress:** `92%`
-* **Current Focus:** Formulated and planned Task 06C (Dedicated KIS Competition Workstation UI & Modal Video Inspector) and Task 06D (Automated Query Translation via Google Translate & Ergonomic Competition Accelerators) to provide a streamlined, distraction-free interface for contest submission separate from the debug inspector.
+* **Overall Progress:** `100%`
+* **Current Focus:** Completed Task 06D (Automated Query Translation & Ergonomic Competition Accelerators); Milestone 4 Extension fully delivered and verified.
 
 ---
 
@@ -29,8 +29,8 @@
 | **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Completed** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py`, `multimodal-fusion-guide.md` |
 | **Task 06** | Web Interface & Relevance Feedback | Explainable pipeline trace, per-cue hits breakdown, multi-cue builder, HTTP 206 video seeking, Rocchio feedback | **Completed** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `search_engine.py`, `debug_server.py`, `src/ui/static/`, `multimodal-search-ui-guide.md` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | 1-click playhead submit (`+-0.5s`), Filmstrip (`+-15s`), `-v:` negative cues, story boost, DRES submit | **Completed** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css`, `kis-interactive-submission-guide.md` |
-| **Task 06C** | KIS Competition Workstation & Modal Inspector | Standalone competition UI, Left KIS submission drawer, Right high-density frame grid, Pop-up video modal | **Pending** | [task-06c](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md) | `competition_server.py`, `src/ui/competition/` assets |
-| **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Pending** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | `competition_server.py`, `competition-workstation-guide.md` |
+| **Task 06C** | KIS Competition Workstation & Modal Inspector | Standalone competition UI, Left KIS submission drawer, Right high-density frame grid, Pop-up video modal | **Completed** | [task-06c](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md) | `competition_server.py`, `src/ui/competition/` assets |
+| **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Completed** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | `competition_server.py`, `src/ui/competition/`, `competition-workstation-guide.md` |
 
 ---
 
@@ -181,18 +181,33 @@
     * Added **Candidate Controls Bar** with **Grid View** & **List View** toggle, dynamic Results selector (25, 50, 100, 200 moments), and candidate statistics counter in [src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [src/ui/static/app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js), and [src/ui/static/style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css).
     * Restructured candidate cards for multi-column grid layout with large 16:9 keyframe thumbnails, overlaid rank/consensus badges, and prominent full-width emerald green `[Submit KIS]` buttons for rapid visual browsing and submission.
   * **Nov 14, 2026:**
-    * Architected and formulated **[Task 06C: Dedicated KIS Competition Workstation UI & Modal Video Inspector](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md)**: decoupled competition workflow from internal debugging inspector; designed dual-zone layout (Left KIS Submission Center Drawer + Right Full-bleed High-Density Frame Grid); planned pop-up modal video player auto-seeked to exact frame timestamp with scrubbing hotkeys and 1-click submit buttons.
-    * Architected and formulated **[Task 06D: Automated Query Translation & Ergonomic Competition Accelerators](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md)**: planned Google Translate API integration via `httpx` with automatic VI -> EN visual cue translation and selective Vietnamese OCR token preservation; designed session query history chips, DRES batch filtering guardrails, and single-hand competition keyboard workflow.
+    * Architected, implemented, and completed **[Task 06C: Dedicated KIS Competition Workstation UI & Modal Video Inspector](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md)**:
+      * Built standalone server entrypoint [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) listening on port `8001`, completely decoupled from debug inspector.
+      * Constructed dual-zone competition interface in `src/ui/competition/` ([index.html](file:///d:/UIT/TX/doan/src/ui/competition/index.html), [style.css](file:///d:/UIT/TX/doan/src/ui/competition/style.css), [app.js](file:///d:/UIT/TX/doan/src/ui/competition/app.js)):
+        * Left Docked Sidebar (KIS Command Center): Digital countdown stopwatch (300s/240s), live score decay simulator (`S_acc + S_time`), target coordinate presets (`Tight +-0.5s`, `Shot`, `Window +-2.5s`), primary submission buttons, and real-time submission response stream.
+        * Right High-Density Frame Grid: CSS grid displaying 12-20 candidate moments simultaneously with 16:9 previews, rank badges (`#1` gold, `#2` silver, `#3` bronze), overlaid consensus badges, DRES batch badges, OCR snippet pills, and direct 1-click emerald green `[Submit KIS]` buttons.
+      * Implemented **Interactive Pop-up Video Modal Player & Inspector**:
+        * HTTP 206 video streaming auto-seeked to exact frame timestamp with instant playback.
+        * Fine-stepper controls: `[-5s]`, `[-1s]`, `[-1f] (40ms)`, `[Play/Pause]`, `[+1f]`, `[+1s]`, `[+5s]`.
+        * Mark In (`I`), Mark Out (`O`), Range Playback preview, and Quick Submit Playhead (`S`).
+        * Embedded Temporal Context Filmstrip drawer (`+-15s` neighbor keyframes).
+        * Docked split panel toggle for contestants who prefer pinned side-by-side view.
+      * Verified end-to-end endpoints with automated tests: health, index serving, DRES status, dry-run submission, duplicate prevention cache, and multimodal search.
+      * Authored comprehensive feature guide in [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md).
+    * Architected, implemented, and completed **[Task 06D: Automated Query Translation & Ergonomic Competition Accelerators](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md)**:
+      * Integrated Google Translate API service via `httpx` in [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) (`POST /api/translate`).
+      * Designed selective cue protection: Vietnamese visual cues are translated into natural English to match SigLIP2's WebLI embedding distribution, while `ocr:` and `-v:` prefixes and Vietnamese text tokens (e.g. license plates, Vietnamese signage) remain intact for SQLite FTS5 search.
+      * Built in-memory LRU translation caching for `< 1ms` instantaneous turnaround on repeated or re-ranked queries; 2.5s timeout with graceful fallback.
+      * Added frontend translation controls in `src/ui/competition/`: `[VI➜EN]` explicit translation button, `[x] Auto VI➜EN` checkbox toggle, and expandable translation diff banner with `[Revert]` and `[X]` dismiss buttons.
+      * Created Session Query History & Iteration Chips (`#queryAcceleratorsBar`) storing the 15 most recent unique queries in `localStorage` (`kis_competition_query_history`) with 1-click execution chips and `[Clear]` button.
+      * Verified full single-hand competition ergonomics (`/`, `Enter`, `Esc`, `Space`, `J`/`L`, `Left`/`Right`, `I`, `O`, `S`).
+      * Authored practical usage documentation in [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) and verified endpoints in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
 
 ---
 
 ## 5. Next Action
-* **Execute Task 06C:**
-  1. Build [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) serving dedicated competition UI on port `8001`.
-  2. Implement dual-zone layout in `src/ui/competition/` (`index.html`, `style.css`, `app.js`): Left KIS Submission Console + Right Full-bleed Frame Grid.
-  3. Implement pop-up modal video player auto-seeked to target timestamp with scrubbing accelerators and hotkey `S` submit.
-* **Execute Task 06D:**
-  1. Implement `POST /api/translate` endpoint using `httpx` calling Google Translate web service with selective OCR preservation.
-  2. Wire frontend auto-translate toggle, query diff pill, and session history chips.
-  3. Author comprehensive feature guide in [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md).
+* **Milestone 4 Extension Complete:**
+  * Both Task 06C and Task 06D are 100% completed and verified.
+  * System is primed for live VBS / AI Challenge competition runs or UIT graduation thesis defense demonstrations.
+  * Launch server at: `uv run --extra gpu python -m src.ui.competition_server --port 8001`.
 
