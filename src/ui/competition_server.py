@@ -40,6 +40,14 @@ VIDEOS_DIR = Path("data/raw_videos")
 KEYFRAMES_DIR = Path("data/keyframes")
 COMPETITION_STATIC_DIR = Path("src/ui/competition")
 
+
+def _clean_fname(path_str: Optional[str]) -> str:
+    """Extracts base filename supporting both Windows (backslash) and POSIX paths."""
+    if not path_str:
+        return ""
+    return str(path_str).replace("\\", "/").rstrip("/").split("/")[-1]
+
+
 # Lazy-loaded singletons
 _db: Optional[MetadataDB] = None
 _search_engine: Optional[Any] = None
@@ -326,11 +334,12 @@ def stream_video(video_id: str, request: Request) -> Response:
     )
 
 
-@app.get("/api/keyframes/{video_id}/{filename}")
+@app.get("/api/keyframes/{video_id}/{filename:path}")
 def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
     """Serves extracted keyframe JPEG image with browser caching."""
     clean_vid = video_id[:-4] if video_id.lower().endswith(".mp4") else video_id
-    img_path = KEYFRAMES_DIR / clean_vid / filename
+    clean_name = _clean_fname(filename)
+    img_path = KEYFRAMES_DIR / clean_vid / clean_name
     if img_path.exists():
         return FileResponse(
             path=str(img_path),
@@ -338,19 +347,27 @@ def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
             headers={"Cache-Control": "public, max-age=86400"}
         )
 
-    kfid = filename[:-4] if filename.lower().endswith(".jpg") else filename
+    kfid = clean_name[:-4] if clean_name.lower().endswith(".jpg") else clean_name
     db = get_db()
     fp = db.get_keyframe_path(kfid)
-    if fp and Path(fp).exists():
-        return FileResponse(
-            path=str(fp),
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=86400"}
-        )
+    if fp:
+        resolved_fp = KEYFRAMES_DIR / clean_vid / _clean_fname(fp)
+        if resolved_fp.exists():
+            return FileResponse(
+                path=str(resolved_fp),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"}
+            )
+        if Path(fp).exists():
+            return FileResponse(
+                path=str(fp),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"}
+            )
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Keyframe image '{filename}' not found for video '{clean_vid}'."
+        detail=f"Keyframe image '{clean_name}' not found for video '{clean_vid}'."
     )
 
 
@@ -384,7 +401,7 @@ def get_video_temporal_context(
     context_frames = []
     for k in keyframes:
         if min_t <= k.timestamp_sec <= max_t:
-            fname = Path(k.file_path).name
+            fname = _clean_fname(k.file_path)
             context_frames.append({
                 "keyframe_id": k.keyframe_id,
                 "shot_id": k.shot_id,

@@ -40,6 +40,13 @@ STATIC_DIR = Path("src/ui/static")
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _clean_fname(path_str: Optional[str]) -> str:
+    """Extracts base filename supporting both Windows (backslash) and POSIX paths."""
+    if not path_str:
+        return ""
+    return str(path_str).replace("\\", "/").rstrip("/").split("/")[-1]
+
+
 def get_db() -> MetadataDB:
     """Instantiates MetadataDB connection."""
     return MetadataDB(DB_PATH)
@@ -140,7 +147,7 @@ def get_video_details(video_id: str) -> Dict[str, Any]:
 
     for k in keyframes:
         if k.shot_id in shot_dict:
-            file_name = Path(k.file_path).name
+            file_name = _clean_fname(k.file_path)
             shot_dict[k.shot_id]["keyframes"].append({
                 "keyframe_id": k.keyframe_id,
                 "frame_idx": k.frame_idx,
@@ -218,21 +225,26 @@ def stream_video(video_id: str, request: Request) -> Response:
     )
 
 
-@app.get("/api/keyframes/{video_id}/{filename}")
+@app.get("/api/keyframes/{video_id}/{filename:path}")
 def get_keyframe_image(video_id: str, filename: str) -> FileResponse:
     """Serves extracted keyframe JPEG image by filename or keyframe_id."""
-    img_path = KEYFRAMES_DIR / video_id / filename
+    clean_name = _clean_fname(filename)
+    img_path = KEYFRAMES_DIR / video_id / clean_name
     if img_path.exists():
         return FileResponse(path=str(img_path), media_type="image/jpeg")
 
     # If filename is a keyframe_id (e.g. L16_V022_00168.jpg or L16_V022_00168)
-    kfid = filename[:-4] if filename.lower().endswith(".jpg") else filename
+    kfid = clean_name[:-4] if clean_name.lower().endswith(".jpg") else clean_name
     db = get_db()
     fp = db.get_keyframe_path(kfid)
-    if fp and Path(fp).exists():
-        return FileResponse(path=str(fp), media_type="image/jpeg")
+    if fp:
+        resolved_fp = KEYFRAMES_DIR / video_id / _clean_fname(fp)
+        if resolved_fp.exists():
+            return FileResponse(path=str(resolved_fp), media_type="image/jpeg")
+        if Path(fp).exists():
+            return FileResponse(path=str(fp), media_type="image/jpeg")
 
-    raise HTTPException(status_code=404, detail=f"Keyframe image '{filename}' not found for video '{video_id}'.")
+    raise HTTPException(status_code=404, detail=f"Keyframe image '{clean_name}' not found for video '{video_id}'.")
 
 
 # Global lazy-loaded search components
@@ -533,14 +545,14 @@ def search_visual(
             shot_kfs = [k for k in kf_cache[vid] if k.shot_id == shot_id]
             center_kf = next((k for k in shot_kfs if k.is_shot_center), (shot_kfs[0] if shot_kfs else None))
             if center_kf:
-                thumb_url = f"/api/keyframes/{vid}/{Path(center_kf.file_path).name}"
+                thumb_url = f"/api/keyframes/{vid}/{_clean_fname(center_kf.file_path)}"
         else:
             file_path = r.get("file_path")
             resolved = False
             if file_path:
-                fp = Path(file_path)
-                if fp.exists() or (KEYFRAMES_DIR / vid / fp.name).exists():
-                    thumb_url = f"/api/keyframes/{vid}/{fp.name}"
+                clean_name = _clean_fname(file_path)
+                if (KEYFRAMES_DIR / vid / clean_name).exists() or Path(file_path).exists():
+                    thumb_url = f"/api/keyframes/{vid}/{clean_name}"
                     resolved = True
             if not resolved:
                 # Fallback to current shot keyframe from database
@@ -548,7 +560,7 @@ def search_visual(
                 shot_kfs = [k for k in kf_cache[vid] if k.shot_id == shot_id]
                 center_kf = next((k for k in shot_kfs if k.is_shot_center), (shot_kfs[0] if shot_kfs else None))
                 if center_kf:
-                    thumb_url = f"/api/keyframes/{vid}/{Path(center_kf.file_path).name}"
+                    thumb_url = f"/api/keyframes/{vid}/{_clean_fname(center_kf.file_path)}"
 
         ts = float(r.get("timestamp_sec", 0.0))
         mins = int(ts // 60)
@@ -610,7 +622,7 @@ def search_ocr_endpoint(
         thumb_url = None
         shot_id = kf_obj.shot_id if kf_obj else 0
         if kf_obj:
-            thumb_url = f"/api/keyframes/{vid}/{Path(kf_obj.file_path).name}"
+            thumb_url = f"/api/keyframes/{vid}/{_clean_fname(kf_obj.file_path)}"
 
         ts = float(h.get("timestamp_sec", 0.0))
         mins = int(ts // 60)
@@ -761,7 +773,7 @@ def get_video_temporal_context(
     context_frames = []
     for k in keyframes:
         if min_t <= k.timestamp_sec <= max_t:
-            fname = Path(k.file_path).name
+            fname = _clean_fname(k.file_path)
             context_frames.append({
                 "keyframe_id": k.keyframe_id,
                 "shot_id": k.shot_id,
