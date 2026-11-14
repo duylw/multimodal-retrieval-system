@@ -9,9 +9,9 @@
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 4: Web Application Delivery & Thesis Defense (Completed)**
-* **Overall Progress:** `100%`
-* **Current Focus:** Completed Task 06B (KIS Interactive Scrubber, Competition Accelerators & DRES Live Submission Console). Implemented 1-Click Quick Submit @ Playhead (`+-0.5s`, hotkey `S`), Temporal Context Filmstrip Drawer (`+-15s` neighbor keyframes), Negative Visual Cue Filtering (`-v:`), Story-Level Video Coverage Boost, N-stage sequential linking (`N >= 2`), single-video search starvation fix, and live DRES API v2 submission with duplicate suppression.
+* **Current Stage:** **Milestone 4 Extension: Dedicated KIS Competition Workstation & Ergonomic Accelerators**
+* **Overall Progress:** `92%`
+* **Current Focus:** Formulated and planned Task 06C (Dedicated KIS Competition Workstation UI & Modal Video Inspector) and Task 06D (Automated Query Translation via Google Translate & Ergonomic Competition Accelerators) to provide a streamlined, distraction-free interface for contest submission separate from the debug inspector.
 
 ---
 
@@ -29,6 +29,8 @@
 | **Task 05** | Multimodal Fusion & Query Routing | Keyframe-grouped OCR FTS5, Deep Top-K (1500), Max-Per-Cue RRF, 5s window, Sequence (`>>`), NMS | **Completed** | [task-05](file:///d:/UIT/TX/doan/tasks/task-05-temporal-fusion.md) | `score_fusion.py`, `query_parser.py`, `search_engine.py`, `multimodal-fusion-guide.md` |
 | **Task 06** | Web Interface & Relevance Feedback | Explainable pipeline trace, per-cue hits breakdown, multi-cue builder, HTTP 206 video seeking, Rocchio feedback | **Completed** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `search_engine.py`, `debug_server.py`, `src/ui/static/`, `multimodal-search-ui-guide.md` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | 1-click playhead submit (`+-0.5s`), Filmstrip (`+-15s`), `-v:` negative cues, story boost, DRES submit | **Completed** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css`, `kis-interactive-submission-guide.md` |
+| **Task 06C** | KIS Competition Workstation & Modal Inspector | Standalone competition UI, Left KIS submission drawer, Right high-density frame grid, Pop-up video modal | **Pending** | [task-06c](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md) | `competition_server.py`, `src/ui/competition/` assets |
+| **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Pending** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | `competition_server.py`, `competition-workstation-guide.md` |
 
 ---
 
@@ -178,10 +180,19 @@
     * Increased default candidate limits across [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [src/retrieval/score_fusion.py](file:///d:/UIT/TX/doan/src/retrieval/score_fusion.py), and [src/ui/debug_server.py](file:///d:/UIT/TX/doan/src/ui/debug_server.py) from 25 to 50/100 candidates.
     * Added **Candidate Controls Bar** with **Grid View** & **List View** toggle, dynamic Results selector (25, 50, 100, 200 moments), and candidate statistics counter in [src/ui/static/index.html](file:///d:/UIT/TX/doan/src/ui/static/index.html), [src/ui/static/app.js](file:///d:/UIT/TX/doan/src/ui/static/app.js), and [src/ui/static/style.css](file:///d:/UIT/TX/doan/src/ui/static/style.css).
     * Restructured candidate cards for multi-column grid layout with large 16:9 keyframe thumbnails, overlaid rank/consensus badges, and prominent full-width emerald green `[Submit KIS]` buttons for rapid visual browsing and submission.
+  * **Nov 14, 2026:**
+    * Architected and formulated **[Task 06C: Dedicated KIS Competition Workstation UI & Modal Video Inspector](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md)**: decoupled competition workflow from internal debugging inspector; designed dual-zone layout (Left KIS Submission Center Drawer + Right Full-bleed High-Density Frame Grid); planned pop-up modal video player auto-seeked to exact frame timestamp with scrubbing hotkeys and 1-click submit buttons.
+    * Architected and formulated **[Task 06D: Automated Query Translation & Ergonomic Competition Accelerators](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md)**: planned Google Translate API integration via `httpx` with automatic VI -> EN visual cue translation and selective Vietnamese OCR token preservation; designed session query history chips, DRES batch filtering guardrails, and single-hand competition keyboard workflow.
 
 ---
 
 ## 5. Next Action
-* **All Planned Tasks Completed (100%):**
-  1. Run final ablation benchmarks (`uv run python -m src.evaluation.evaluate`) or launch the interactive KIS workstation (`uv run python -m src.ui.debug_server`) for competition simulation and thesis defense demonstration.
+* **Execute Task 06C:**
+  1. Build [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) serving dedicated competition UI on port `8001`.
+  2. Implement dual-zone layout in `src/ui/competition/` (`index.html`, `style.css`, `app.js`): Left KIS Submission Console + Right Full-bleed Frame Grid.
+  3. Implement pop-up modal video player auto-seeked to target timestamp with scrubbing accelerators and hotkey `S` submit.
+* **Execute Task 06D:**
+  1. Implement `POST /api/translate` endpoint using `httpx` calling Google Translate web service with selective OCR preservation.
+  2. Wire frontend auto-translate toggle, query diff pill, and session history chips.
+  3. Author comprehensive feature guide in [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md).
 
