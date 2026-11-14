@@ -43,7 +43,7 @@ class OCRExtractor(BaseExtractor):
 
         ocr_cfg = self.config.get("ocr_model", {})
         self.lang: str = ocr_cfg.get("language", "vi")
-        self.use_gpu: bool = bool(ocr_cfg.get("use_gpu", False))
+        self.use_gpu: bool = bool(ocr_cfg.get("use_gpu", False)) and torch.cuda.is_available()
         self.model_dir: str = str(Path(ocr_cfg.get("model_dir", "models/easyocr")).resolve())
         self.min_confidence: float = float(ocr_cfg.get("min_confidence", 0.60))
         self.edge_density_threshold: float = float(ocr_cfg.get("edge_density_threshold", 0.08))
