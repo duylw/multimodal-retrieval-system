@@ -62,6 +62,21 @@ class QueryParser:
         stage = cls._parse_stage(raw_text)
         return ParsedMultiCueQuery(stages=[stage], is_sequential=False)
 
+    @staticmethod
+    def _collect_global_negatives(data: Dict[str, Any]) -> List[str]:
+        """Extracts top-level negative visual cues from either string or list fields."""
+        negatives: List[str] = []
+        raw_single = str(data.get("negative_visual") or "").strip()
+        if raw_single:
+            negatives.append(raw_single)
+        raw_list = data.get("negative_visual_queries") or []
+        if isinstance(raw_list, list):
+            for item in raw_list:
+                cleaned = str(item).strip()
+                if cleaned and cleaned not in negatives:
+                    negatives.append(cleaned)
+        return negatives
+
     @classmethod
     def _parse_dict(cls, data: Dict[str, Any]) -> ParsedMultiCueQuery:
         """Parses structured JSON dictionary into ParsedMultiCueQuery."""
@@ -74,7 +89,7 @@ class QueryParser:
         max_gap_sec = max(min_gap_sec + 1.0, float(data.get("max_gap_sec", data.get("max_sequence_gap_sec", 30.0))))
 
         global_ocr = str(data.get("ocr_text") or data.get("ocr_query") or "").strip()
-        global_neg = str(data.get("negative_visual") or "").strip()
+        global_negs = cls._collect_global_negatives(data)
 
         # Check for UI Multi-Stage 'scenes' payload ([{visual, ocr, negative_visual}])
         scenes_data = data.get("scenes")
@@ -92,8 +107,10 @@ class QueryParser:
                     n_list.extend(str(q).strip() for q in sc.get("negative_visual_queries", []) if str(q).strip())
                     if idx == 0 and global_ocr and ocr_mode != "off" and global_ocr not in o_list:
                         o_list.append(global_ocr)
-                    if idx == 0 and global_neg and global_neg not in n_list:
-                        n_list.append(global_neg)
+                    if idx == 0 and global_negs:
+                        for gn in global_negs:
+                            if gn not in n_list:
+                                n_list.append(gn)
                     st = QueryStage(visual_queries=v_list, ocr_queries=o_list, negative_visual_queries=n_list)
                 else:
                     continue
@@ -122,6 +139,10 @@ class QueryParser:
                 neg_v_q = [str(q).strip() for q in st.get("negative_visual_queries", []) if str(q).strip()]
                 if idx == 0 and global_ocr and ocr_mode != "off" and global_ocr not in o_q:
                     o_q.append(global_ocr)
+                if idx == 0 and global_negs:
+                    for gn in global_negs:
+                        if gn not in neg_v_q:
+                            neg_v_q.append(gn)
                 if v_q or o_q:
                     stages.append(QueryStage(
                         visual_queries=v_q,
@@ -148,9 +169,10 @@ class QueryParser:
             if global_ocr and ocr_mode != "off" and parsed_str.stages:
                 if global_ocr not in parsed_str.stages[0].ocr_queries:
                     parsed_str.stages[0].ocr_queries.append(global_ocr)
-            if global_neg and parsed_str.stages:
-                if global_neg not in parsed_str.stages[0].negative_visual_queries:
-                    parsed_str.stages[0].negative_visual_queries.append(global_neg)
+            if global_negs and parsed_str.stages:
+                for gn in global_negs:
+                    if gn not in parsed_str.stages[0].negative_visual_queries:
+                        parsed_str.stages[0].negative_visual_queries.append(gn)
             parsed_str.ocr_mode = ocr_mode
             parsed_str.ocr_boost_weight = ocr_boost_weight
             parsed_str.anchor_stage = min(anchor_stage, max(0, len(parsed_str.stages) - 1))
@@ -162,9 +184,7 @@ class QueryParser:
         ocr_queries = [str(q).strip() for q in data.get("ocr_queries", []) if str(q).strip()]
         if global_ocr and ocr_mode != "off" and global_ocr not in ocr_queries:
             ocr_queries.append(global_ocr)
-        neg_visual_queries = [str(q).strip() for q in data.get("negative_visual_queries", []) if str(q).strip()]
-        if global_neg and global_neg not in neg_visual_queries:
-            neg_visual_queries.append(global_neg)
+        neg_visual_queries = list(global_negs)
 
         single_stage = QueryStage(
             visual_queries=visual_queries,

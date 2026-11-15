@@ -88,6 +88,120 @@ class SearchEngine:
             vec_idx._vid_to_int_ids = vid_map
         return vec_idx._vid_to_int_ids
 
+    def _ensure_kfid_index_map(self, vec_idx: Any) -> Dict[str, int]:
+        """Builds and caches an O(1) lookup map of keyframe_id -> FAISS integer ID."""
+        if not hasattr(vec_idx, "_kfid_to_int_id"):
+            vec_idx._kfid_to_int_id = {
+                meta["keyframe_id"]: idx_i
+                for idx_i, meta in enumerate(vec_idx.id_to_metadata)
+                if meta.get("keyframe_id")
+            }
+        return vec_idx._kfid_to_int_id
+
+    @staticmethod
+    def _extract_batch_id(video_id: str) -> str:
+        """Extracts batch prefix (e.g. 'L15' from 'L15_V004.mp4')."""
+        clean = video_id.strip().replace(".mp4", "").replace(".MP4", "")
+        return clean.split("_")[0].upper() if clean else ""
+
+    @staticmethod
+    def _normalize_scope_filters(
+        allowed_batches: Optional[Union[List[str], Set[str]]] = None,
+        excluded_videos: Optional[Union[List[str], Set[str]]] = None
+    ) -> Tuple[Optional[Set[str]], Set[str]]:
+        """Normalizes batch allowlist and excluded video set."""
+        allowed_set: Optional[Set[str]] = None
+        if allowed_batches is not None:
+            allowed_set = {str(b).strip().upper() for b in allowed_batches if str(b).strip()}
+
+        excluded_set: Set[str] = set()
+        if excluded_videos:
+            excluded_set = {
+                str(v).strip().replace(".mp4", "").replace(".MP4", "")
+                for v in excluded_videos
+                if str(v).strip()
+            }
+        return allowed_set, excluded_set
+
+    def _resolve_target_videos(
+        self,
+        video_id: Optional[str],
+        allowed_batches: Optional[Set[str]],
+        excluded_videos: Set[str]
+    ) -> Optional[Set[str]]:
+        """Resolves explicit video subset when single-video lock or batch scope is active."""
+        vid_clean = video_id.strip() if video_id and video_id.strip() else None
+        if vid_clean:
+            if vid_clean in excluded_videos:
+                return set()
+            if allowed_batches is not None and self._extract_batch_id(vid_clean) not in allowed_batches:
+                return set()
+            return {vid_clean}
+
+        if allowed_batches is None:
+            return None
+        if not allowed_batches:
+            return set()
+
+        vec_idx = self._ensure_vector_index()
+        vid_map = self._ensure_vid_index_map(vec_idx)
+        return {
+            vid for vid in vid_map.keys()
+            if vid not in excluded_videos and self._extract_batch_id(vid) in allowed_batches
+        }
+
+    @classmethod
+    def _filter_hits_by_scope(
+        cls,
+        hits: List[Dict[str, Any]],
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Filters hit dictionaries by active batch scope and excluded video set."""
+        if not hits or (allowed_batches is None and not excluded_videos):
+            return hits
+
+        excluded = excluded_videos or set()
+        filtered: List[Dict[str, Any]] = []
+        for h in hits:
+            vid = str(h.get("video_id", "")).strip()
+            if not vid or vid in excluded:
+                continue
+            if allowed_batches is not None and cls._extract_batch_id(vid) not in allowed_batches:
+                continue
+            item = dict(h)
+            item["rank"] = len(filtered) + 1
+            filtered.append(item)
+        return filtered
+
+    def _execute_filtered_visual_vector_search(
+        self,
+        q_vec: Any,
+        top_k: int = 1500,
+        video_id: Optional[str] = None,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Runs FAISS similarity search while honoring video lock, batch scope, and exclusions."""
+        if q_vec is None:
+            return []
+
+        vec_idx = self._ensure_vector_index()
+        excluded = excluded_videos or set()
+        target_videos = self._resolve_target_videos(video_id, allowed_batches, excluded)
+
+        if target_videos is not None:
+            if not target_videos:
+                return []
+            if len(target_videos) <= 60:
+                return self._score_visual_subset(q_vec, target_videos=target_videos, top_k=top_k)
+
+        has_filters = (allowed_batches is not None) or bool(excluded)
+        fetch_k = min(vec_idx.total_vectors, max(top_k * 4, 4000)) if has_filters else top_k
+        raw_hits = vec_idx.search(q_vec, top_k=fetch_k)
+        filtered = self._filter_hits_by_scope(raw_hits, allowed_batches=allowed_batches, excluded_videos=excluded)
+        return filtered[:top_k]
+
     @staticmethod
     def _decorate_trace_hits(
         db: MetadataDB,
@@ -210,7 +324,9 @@ class SearchEngine:
         query: Union[str, Dict[str, Any], ParsedMultiCueQuery],
         mode: str = "auto",
         top_k: int = 50,
-        video_id: Optional[str] = None
+        video_id: Optional[str] = None,
+        allowed_batches: Optional[Union[List[str], Set[str]]] = None,
+        excluded_videos: Optional[Union[List[str], Set[str]]] = None
     ) -> List[CandidateMoment]:
         """
         Executes multimodal search and returns ranked, non-overlapping candidate moments.
@@ -220,6 +336,8 @@ class SearchEngine:
             mode: Search mode ('auto', 'visual', or 'ocr').
             top_k: Number of moments to retrieve (default 50).
             video_id: Optional video ID filter to restrict search to one video.
+            allowed_batches: Optional batch prefixes to allow (e.g. ['L15', 'L16']).
+            excluded_videos: Optional video IDs to exclude from results.
 
         Returns:
             List of CandidateMoment instances sorted by fused score.
@@ -229,7 +347,9 @@ class SearchEngine:
             mode=mode,
             top_k=top_k,
             video_id=video_id,
-            trace_top_hits=0
+            trace_top_hits=0,
+            allowed_batches=allowed_batches,
+            excluded_videos=excluded_videos
         )
         return moments
 
@@ -239,7 +359,9 @@ class SearchEngine:
         mode: str = "auto",
         top_k: int = 50,
         video_id: Optional[str] = None,
-        trace_top_hits: int = 10
+        trace_top_hits: int = 10,
+        allowed_batches: Optional[Union[List[str], Set[str]]] = None,
+        excluded_videos: Optional[Union[List[str], Set[str]]] = None
     ) -> Tuple[List[CandidateMoment], Dict[str, Any]]:
         """
         Executes multimodal search with explainability trace capturing per-cue hits and fusion stats.
@@ -255,6 +377,7 @@ class SearchEngine:
                 "total_time_ms": round((time.perf_counter() - start_time) * 1000, 2)
             }
 
+        allowed_set, excluded_set = self._normalize_scope_filters(allowed_batches, excluded_videos)
         mode_lower = mode.lower()
 
         # Chronological multi-stage sequence: Two-Phase Anchor-then-Scan
@@ -263,7 +386,9 @@ class SearchEngine:
                 parsed=parsed,
                 top_k=top_k,
                 video_id=video_id,
-                trace_top_hits=trace_top_hits
+                trace_top_hits=trace_top_hits,
+                allowed_batches=allowed_set,
+                excluded_videos=excluded_set
             )
             self._decorate_moments(moments)
             return moments, self._build_trace(
@@ -289,7 +414,9 @@ class SearchEngine:
                 parsed=parsed,
                 top_k=top_k,
                 video_id=video_id,
-                trace_top_hits=trace_top_hits
+                trace_top_hits=trace_top_hits,
+                allowed_batches=allowed_set,
+                excluded_videos=excluded_set
             )
             self._decorate_moments(moments)
             return moments, self._build_trace(
@@ -315,7 +442,9 @@ class SearchEngine:
                 v_cue,
                 top_k=self.top_k_visual,
                 video_id=video_id,
-                negative_cues=neg_cues
+                negative_cues=neg_cues,
+                allowed_batches=allowed_set,
+                excluded_videos=excluded_set
             )
             lat_ms = round((time.perf_counter() - t0) * 1000, 2)
             hits_by_cue[cue_id] = hits
@@ -336,7 +465,13 @@ class SearchEngine:
                 cue_id = f"s0_ocr{o_idx}"
                 cue_types[cue_id] = "ocr"
                 t0 = time.perf_counter()
-                hits = self._search_ocr_cue(o_cue, top_k=self.top_k_ocr, video_id=video_id)
+                hits = self._search_scoped_ocr_cue(
+                    o_cue,
+                    top_k=self.top_k_ocr,
+                    video_id=video_id,
+                    allowed_batches=allowed_set,
+                    excluded_videos=excluded_set
+                )
                 lat_ms = round((time.perf_counter() - t0) * 1000, 2)
                 hits_by_cue[cue_id] = hits
                 cues_trace.append({
@@ -365,6 +500,95 @@ class SearchEngine:
             moments=moments,
             start_time=start_time
         )
+
+    def search_by_keyframe(
+        self,
+        keyframe_id: str,
+        steer_text: Optional[str] = None,
+        steer_alpha: float = 0.3,
+        negative_cues: Optional[List[str]] = None,
+        top_k: int = 300,
+        video_id: Optional[str] = None,
+        allowed_batches: Optional[Union[List[str], Set[str]]] = None,
+        excluded_videos: Optional[Union[List[str], Set[str]]] = None,
+        trace_top_hits: int = 10
+    ) -> Tuple[List[CandidateMoment], Dict[str, Any]]:
+        """
+        0ms-inference keyframe-to-keyframe similarity search via FAISS vector reconstruction.
+        Loads SigLIP2 text encoder only when steer_text or negative_cues are provided.
+        """
+        import numpy as np
+
+        start_time = time.perf_counter()
+        clean_kfid = keyframe_id.strip()
+        if not clean_kfid:
+            raise ValueError("keyframe_id cannot be empty.")
+
+        vec_idx = self._ensure_vector_index()
+        kfid_map = self._ensure_kfid_index_map(vec_idx)
+        if clean_kfid not in kfid_map:
+            raise ValueError(f"Keyframe ID '{clean_kfid}' not found in FAISS index.")
+
+        faiss_id = kfid_map[clean_kfid]
+        v_img = vec_idx.index.reconstruct(faiss_id).astype(np.float32)
+
+        q_vec = v_img
+        clean_steer = steer_text.strip() if steer_text and steer_text.strip() else None
+        clean_negs = [c.strip() for c in (negative_cues or []) if c and c.strip()]
+
+        if clean_steer or clean_negs:
+            extractor = self._ensure_visual_extractor()
+            if clean_steer:
+                alpha = max(0.0, min(1.0, float(steer_alpha)))
+                v_txt = extractor.extract_text_embedding(clean_steer).astype(np.float32)[0]
+                q_vec = (1.0 - alpha) * v_img + alpha * v_txt
+            if clean_negs:
+                neg_vecs = [extractor.extract_text_embedding(nc).astype(np.float32)[0] for nc in clean_negs]
+                neg_mean = np.mean(neg_vecs, axis=0).astype(np.float32)
+                q_vec = q_vec - 0.35 * neg_mean
+
+        norm = float(np.linalg.norm(q_vec))
+        if norm > 1e-6:
+            q_vec = q_vec / norm
+
+        allowed_set, excluded_set = self._normalize_scope_filters(allowed_batches, excluded_videos)
+        t0 = time.perf_counter()
+        raw_hits = self._execute_filtered_visual_vector_search(
+            q_vec.reshape(1, -1),
+            top_k=max(self.top_k_visual, top_k),
+            video_id=video_id,
+            allowed_batches=allowed_set,
+            excluded_videos=excluded_set
+        )
+        lat_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+        cue_id = "sim_v0"
+        moments = self.fusor.fuse_and_nms(
+            stage_results=[{cue_id: raw_hits}],
+            cue_types={cue_id: "visual"},
+            weights={"visual": 1.0},
+            top_k=top_k
+        )
+        self._decorate_moments(moments)
+
+        trace = {
+            "mode": "similar",
+            "reference_keyframe_id": clean_kfid,
+            "steer_text": clean_steer,
+            "steer_alpha": steer_alpha if clean_steer else 0.0,
+            "negative_visual_queries": clean_negs,
+            "total_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            "cues": [{
+                "cue_id": cue_id,
+                "modality": "similar",
+                "query_text": clean_kfid + (f" + {clean_steer}" if clean_steer else ""),
+                "hits_count": len(raw_hits),
+                "latency_ms": lat_ms,
+                "top_hits": self._decorate_trace_hits(self.db, raw_hits, trace_top_hits, include_text=False)
+            }],
+            "returned_moments": len(moments)
+        }
+        return moments, trace
 
     def _build_trace(
         self,
@@ -404,7 +628,9 @@ class SearchEngine:
         top_k: int,
         video_id: Optional[str],
         trace_top_hits: int,
-        stage_index: int = 0
+        stage_index: int = 0,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
     ) -> Tuple[List[CandidateMoment], List[Dict[str, Any]]]:
         """
         Visual-First Hybrid OCR coordination:
@@ -423,7 +649,13 @@ class SearchEngine:
             for o_idx, o_cue in enumerate(stage.ocr_queries):
                 cue_id = f"s{stage_index}_ocr{o_idx}"
                 t0 = time.perf_counter()
-                raw_ocr = self._search_ocr_cue(o_cue, top_k=self.top_k_ocr, video_id=video_id)
+                raw_ocr = self._search_scoped_ocr_cue(
+                    o_cue,
+                    top_k=self.top_k_ocr,
+                    video_id=video_id,
+                    allowed_batches=allowed_batches,
+                    excluded_videos=excluded_videos
+                )
                 gated = self._filter_quality_ocr_hits(raw_ocr, min_score=0.35)
                 if not gated and raw_ocr and ocr_mode == "filter":
                     gated = raw_ocr[:25]
@@ -442,10 +674,16 @@ class SearchEngine:
                     "top_hits": self._decorate_trace_hits(self.db, gated, trace_top_hits, include_text=True)
                 })
 
-        # Filter mode: restrict Visual scoring exclusively to OCR-matched videos
+        # Filter mode: restrict Visual scoring exclusively to OCR-matched videos within scope
         target_videos: Optional[Set[str]] = None
         if ocr_mode == "filter" and stage.ocr_queries:
-            target_videos = {h["video_id"] for h in quality_ocr_hits if h.get("video_id")}
+            excluded = excluded_videos or set()
+            target_videos = {
+                h["video_id"] for h in quality_ocr_hits
+                if h.get("video_id")
+                and h["video_id"] not in excluded
+                and (allowed_batches is None or self._extract_batch_id(h["video_id"]) in allowed_batches)
+            }
             if not target_videos:
                 return [], cues_trace
 
@@ -464,7 +702,9 @@ class SearchEngine:
                     v_cue,
                     top_k=self.top_k_visual,
                     video_id=video_id,
-                    negative_cues=neg_cues
+                    negative_cues=neg_cues,
+                    allowed_batches=allowed_batches,
+                    excluded_videos=excluded_videos
                 )
             lat_ms = round((time.perf_counter() - t0) * 1000, 2)
             hits_by_cue[cue_id] = hits
@@ -526,7 +766,9 @@ class SearchEngine:
         parsed: ParsedMultiCueQuery,
         top_k: int,
         video_id: Optional[str],
-        trace_top_hits: int
+        trace_top_hits: int,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
     ) -> Tuple[List[CandidateMoment], List[Dict[str, Any]]]:
         """
         Two-Phase Anchor-then-Scan Sequential Linking:
@@ -551,7 +793,9 @@ class SearchEngine:
                 top_k=anchor_pool_limit,
                 video_id=video_id,
                 trace_top_hits=trace_top_hits,
-                stage_index=anchor_idx
+                stage_index=anchor_idx,
+                allowed_batches=allowed_batches,
+                excluded_videos=excluded_videos
             )
         else:
             # OCR-only anchor stage fallback
@@ -560,7 +804,13 @@ class SearchEngine:
             for o_idx, o_cue in enumerate(anchor_stage.ocr_queries):
                 cue_id = f"s{anchor_idx}_ocr{o_idx}"
                 t0 = time.perf_counter()
-                h_list = self._search_ocr_cue(o_cue, top_k=self.top_k_ocr, video_id=video_id)
+                h_list = self._search_scoped_ocr_cue(
+                    o_cue,
+                    top_k=self.top_k_ocr,
+                    video_id=video_id,
+                    allowed_batches=allowed_batches,
+                    excluded_videos=excluded_videos
+                )
                 lat_ms = round((time.perf_counter() - t0) * 1000, 2)
                 ocr_hits.extend(h_list)
                 cues_trace.append({
@@ -842,45 +1092,29 @@ class SearchEngine:
         visual_cue: str,
         top_k: int = 1500,
         video_id: Optional[str] = None,
-        negative_cues: Optional[List[str]] = None
+        negative_cues: Optional[List[str]] = None,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
     ) -> List[Dict[str, Any]]:
         """
         Encodes English visual description (with optional negative cue vector subtraction)
-        and searches FAISS index without single-video filter starvation.
+        and searches FAISS index while honoring video, batch, and exclusion scope filters.
         """
-        import numpy as np
-
         clean_cue = visual_cue.strip()
         if not clean_cue:
             return []
 
-        vec_idx = self._ensure_vector_index()
-        extractor = self._ensure_visual_extractor()
+        q_vec = self._encode_visual_vector([clean_cue], negative_cues=negative_cues)
+        if q_vec is None:
+            return []
 
-        # Extract 768-dim L2-normalized text embedding
-        q_vec = extractor.extract_text_embedding(clean_cue).astype(np.float32)
-
-        # Apply Negative Visual Subtraction (-v:) if negative cues are present
-        if negative_cues:
-            neg_vecs = [
-                extractor.extract_text_embedding(nc.strip())[0]
-                for nc in negative_cues
-                if nc.strip()
-            ]
-            if neg_vecs:
-                neg_mean = np.mean(neg_vecs, axis=0).astype(np.float32)
-                shifted = q_vec[0] - 0.35 * neg_mean
-                norm = float(np.linalg.norm(shifted))
-                if norm > 1e-6:
-                    q_vec = (shifted / norm).reshape(1, -1)
-
-        # If filtering by a specific video_id, score all vectors of that video directly
-        # to prevent global top_k cutoff from starving single-video queries
-        if video_id:
-            return self._score_visual_subset(q_vec, target_videos={video_id}, top_k=top_k)
-
-        raw_hits = vec_idx.search(q_vec, top_k=top_k)
-        return raw_hits
+        return self._execute_filtered_visual_vector_search(
+            q_vec,
+            top_k=top_k,
+            video_id=video_id,
+            allowed_batches=allowed_batches,
+            excluded_videos=excluded_videos
+        )
 
     def _search_ocr_cue(
         self,
@@ -895,6 +1129,27 @@ class SearchEngine:
 
         hits = self.db.search_ocr(clean_cue, video_id=video_id, limit=top_k)
         return hits
+
+    def _search_scoped_ocr_cue(
+        self,
+        ocr_cue: str,
+        top_k: int = 500,
+        video_id: Optional[str] = None,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Runs _search_ocr_cue with oversampling and filters by batch scope and video blacklist."""
+        has_scope = (allowed_batches is not None) or bool(excluded_videos)
+        fetch_k = top_k * 3 if has_scope else top_k
+        raw_hits = self._search_ocr_cue(ocr_cue, top_k=fetch_k, video_id=video_id)
+        if not has_scope:
+            return raw_hits[:top_k]
+        filtered = self._filter_hits_by_scope(
+            raw_hits,
+            allowed_batches=allowed_batches,
+            excluded_videos=excluded_videos
+        )
+        return filtered[:top_k]
 
     def _resolve_hit_thumbnail(self, hit: Dict[str, Any], fallback_vid: str) -> None:
         """Populates thumbnail_url on a hit dict if missing."""

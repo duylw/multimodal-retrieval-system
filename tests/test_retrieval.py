@@ -300,9 +300,114 @@ def test_task_07a_visual_first_and_anchor_sequence():
     print("[OK] Task 07A Visual-First OCR (Boost/Filter) & Anchor-then-Scan Sequential tests passed!")
 
 
+def test_task_07b_similarity_and_active_filtering():
+    """Verify Task 07B: 0ms FAISS keyframe reconstruct similarity, negative cues, batch scope, and video blacklist."""
+    import faiss
+    import numpy as np
+    from src.retrieval.search_engine import SearchEngine
+
+    # 1. Verify top-level negative_visual_queries parsing in dict payloads
+    p_neg = QueryParser.parse({
+        "query": "red bus",
+        "negative_visual_queries": ["cartoon", "sketch"]
+    })
+    assert p_neg.stages[0].negative_visual_queries == ["cartoon", "sketch"]
+
+    # 2. Synthetic FAISS IndexFlatIP across L10, L15, and L18 batches
+    class MockVecIndex:
+        def __init__(self, vecs, metas):
+            self.index = faiss.IndexFlatIP(4)
+            self.index.add(vecs.astype(np.float32))
+            self.id_to_metadata = metas
+            self.total_vectors = len(metas)
+
+        def search(self, q_vec, top_k=10):
+            sims, idxs = self.index.search(q_vec.astype(np.float32), min(top_k, self.total_vectors))
+            hits = []
+            for rank, (s, i) in enumerate(zip(sims[0], idxs[0]), start=1):
+                if i < 0:
+                    continue
+                item = dict(self.id_to_metadata[i])
+                item["score"] = float(s)
+                item["rank"] = rank
+                hits.append(item)
+            return hits
+
+    vecs = np.array([
+        [1.0, 0.0, 0.0, 0.0],   # 0: L15_V001 @ 10s (reference image)
+        [0.90, 0.43, 0.0, 0.0], # 1: L18_V002 @ 20s (close visual neighbor)
+        [0.10, 0.99, 0.0, 0.0], # 2: L10_V001 @ 30s (distant orthogonal scene)
+    ], dtype=np.float32)
+    vecs = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
+    metas = [
+        {"video_id": "L15_V001", "keyframe_id": "L15_V001_00001", "timestamp_sec": 10.0, "file_path": "L15_1.jpg"},
+        {"video_id": "L18_V002", "keyframe_id": "L18_V002_00001", "timestamp_sec": 20.0, "file_path": "L18_1.jpg"},
+        {"video_id": "L10_V001", "keyframe_id": "L10_V001_00001", "timestamp_sec": 30.0, "file_path": "L10_1.jpg"},
+    ]
+
+    class CountingExtractor:
+        def __init__(self):
+            self.calls = 0
+
+        def extract_text_embedding(self, text: str):
+            self.calls += 1
+            if "orth" in text.lower():
+                return np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)
+            return np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+
+    extractor = CountingExtractor()
+    engine = SearchEngine()
+    engine._vector_index = MockVecIndex(vecs, metas)
+    engine._visual_extractor = extractor
+    engine.db.get_keyframe_path = lambda kfid: f"{kfid}.jpg"
+
+    # 2a. Pure 0ms keyframe similarity must NOT call text encoder
+    m_sim, tr_sim = engine.search_by_keyframe("L15_V001_00001", top_k=5)
+    assert extractor.calls == 0, "Pure image similarity must not load/invoke text encoder!"
+    assert m_sim[0].video_id == "L15_V001"
+    assert m_sim[0].keyframe_id == "L15_V001_00001"
+    assert m_sim[1].video_id == "L18_V002"
+    assert tr_sim["mode"] == "similar"
+
+    # 2b. Excluded videos removes L15_V001 cleanly and promotes L18_V002 to #1
+    m_excl, _ = engine.search_by_keyframe("L15_V001_00001", excluded_videos=["L15_V001"], top_k=5)
+    assert all(m.video_id != "L15_V001" for m in m_excl)
+    assert m_excl[0].video_id == "L18_V002"
+
+    # 2c. Batch scope allowlist restricts retrieval strictly to L10
+    m_batch, _ = engine.search_by_keyframe("L15_V001_00001", allowed_batches=["L10"], top_k=5)
+    assert len(m_batch) == 1
+    assert m_batch[0].video_id == "L10_V001"
+
+    # 2d. Steered text + negative subtraction blends vectors and invokes extractor
+    m_steer, _ = engine.search_by_keyframe(
+        "L15_V001_00001",
+        steer_text="orth",
+        steer_alpha=0.85,
+        negative_cues=["ref"],
+        top_k=5
+    )
+    assert extractor.calls == 2
+    assert m_steer[0].video_id == "L10_V001"
+
+    # 2e. Text search_with_trace honors allowed_batches and excluded_videos
+    m_txt_scoped, _ = engine.search_with_trace(
+        "bus",
+        mode="visual",
+        top_k=5,
+        allowed_batches=["L15", "L18"],
+        excluded_videos=["L15_V001"]
+    )
+    assert len(m_txt_scoped) == 1
+    assert m_txt_scoped[0].video_id == "L18_V002"
+
+    print("[OK] Task 07B Similarity Search & Active Filtering tests passed!")
+
+
 if __name__ == "__main__":
     test_query_parser()
     test_score_fusion()
     test_search_with_trace()
     test_kis_endpoints()
     test_task_07a_visual_first_and_anchor_sequence()
+    test_task_07b_similarity_and_active_filtering()
