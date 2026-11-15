@@ -255,7 +255,7 @@
   function getVideoBatch(videoId) {
     if (!videoId) return '';
     const clean = videoId.replace(/\.mp4$/i, '').trim();
-    return clean.split('_')[0] || '';
+    return (clean.split('_')[0] || '').toUpperCase();
   }
 
   function isDresOfficialBatch(videoId) {
@@ -1333,11 +1333,32 @@
 
     if (candidates.length === 0) {
       dom.candidateTotalCount.textContent = '0';
+      const rawCount = Array.isArray(state.allCandidates) ? state.allCandidates.length : 0;
+      const batchSummary = formatBatchScopeSummary();
+      const thisVidLocked = Boolean(dom.targetVideoOnly && dom.targetVideoOnly.checked && state.activeVideoId);
+      let diagnosticDetail = 'Try broadening your query keywords, expanding Batch Scope, or resetting hidden videos.';
+      if (rawCount > 0) {
+        diagnosticDetail = `Server returned ${rawCount} candidates, but all were filtered out by Batch Scope (${batchSummary}) or Hidden Videos (${state.excludedVideos.size}).`;
+      } else {
+        const activeFlags = [];
+        if (state.allowedBatches && state.allowedBatches.size < ALL_BATCH_LIST.length) {
+          activeFlags.push(`Batch Scope: ${batchSummary}`);
+        }
+        if (thisVidLocked) {
+          activeFlags.push(`This Video: ${state.activeVideoId}`);
+        }
+        if (state.excludedVideos.size > 0) {
+          activeFlags.push(`Hidden: ${state.excludedVideos.size}`);
+        }
+        if (activeFlags.length > 0) {
+          diagnosticDetail = `Server returned 0 candidates with active filters (${activeFlags.join(' | ')}). Expand Batch Scope to All or uncheck This Video.`;
+        }
+      }
       dom.candidateGrid.innerHTML = `
         <div class="grid-empty-state">
-          <div class="empty-icon">⚠️</div>
+          <div class="empty-icon">[!]</div>
           <h3>No Matching Candidates Found</h3>
-          <p>Try broadening your query keywords, expanding Batch Scope, or resetting hidden videos.</p>
+          <p>${diagnosticDetail}</p>
         </div>
       `;
       return;
