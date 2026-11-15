@@ -219,9 +219,93 @@ def test_task_07b_similarity_endpoint_and_ui():
     print("[OK] Task 07B Similarity Search Endpoint & Workstation UI tests passed!")
 
 
+def test_task_07c_video_grouping_and_dual_frame_contracts() -> None:
+    """Verifies Task 07C grouped_videos contract, normalized stage_hits, and view-switcher UI assets."""
+    from src.common.types import CandidateMoment
+    from src.ui.competition_server import _group_results_by_video, _serialize_moments, app
+
+    client = TestClient(app)
+
+    # 1. Verify UI HTML & JS view switcher / dual-frame / strip symbols
+    html = client.get("/").text
+    for elem_id in ("viewModeSwitch", "viewModeFramesBtn", "viewModeVideoBtn"):
+        assert elem_id in html, f"Missing Task 07C element {elem_id} in index.html"
+
+    js_res = client.get("/app.js")
+    assert js_res.status_code == 200
+    js_src = js_res.text
+    for marker in ("groupCandidatesByVideo", "createVideoStripCard", "dual-frame-wrapper"):
+        assert marker in js_src, f"Missing Task 07C frontend symbol {marker} in app.js"
+
+    # 2. Unit-check normalized stage_hits serialization for sequential moments
+    m_seq = CandidateMoment(
+        video_id="L01_V001",
+        start_sec=10.0,
+        end_sec=22.4,
+        start_ms=10000,
+        end_ms=22400,
+        score=0.9123,
+        matched_cues=["s0_v0", "s1_v0"],
+        keyframe_id="L01_V001_00010",
+        thumbnail_url="/api/keyframes/L01_V001/L01_V001_00010.jpg",
+        cue_evidence={
+            "sequence_stages": [
+                {"stage_index": 1, "keyframe_id": "L01_V001_00022", "video_id": "L01_V001", "timestamp_sec": 22.4, "score": 0.72},
+                {"stage_index": 0, "keyframe_id": "L01_V001_00010", "video_id": "L01_V001", "timestamp_sec": 10.0, "score": 0.88},
+            ]
+        }
+    )
+    m_single_high = CandidateMoment(
+        video_id="L01_V001",
+        start_sec=4.0,
+        end_sec=6.0,
+        start_ms=4000,
+        end_ms=6000,
+        score=0.65,
+        keyframe_id="L01_V001_00004",
+        thumbnail_url="/api/keyframes/L01_V001/L01_V001_00004.jpg",
+    )
+    m_other_vid = CandidateMoment(
+        video_id="L02_V003",
+        start_sec=30.0,
+        end_sec=35.0,
+        start_ms=30000,
+        end_ms=35000,
+        score=0.80,
+        keyframe_id="L02_V003_00030",
+        thumbnail_url="/api/keyframes/L02_V003/L02_V003_00030.jpg",
+    )
+    serialized = _serialize_moments([m_seq, m_other_vid, m_single_high])
+    assert serialized[0]["is_sequential"] is True
+    assert [s["stage_index"] for s in serialized[0]["stage_hits"]] == [0, 1]
+    assert serialized[0]["stage_hits"][1]["thumbnail_url"] == "/api/keyframes/L01_V001/L01_V001_00022.jpg"
+
+    grouped = _group_results_by_video(serialized, max_hits_per_video=7)
+    assert len(grouped) == 2
+    assert grouped[0]["video_id"] == "L01_V001"
+    assert grouped[1]["video_id"] == "L02_V003"
+    # L01_V001 hits sorted chronologically (4.0 before 10.0)
+    assert [h["start_sec"] for h in grouped[0]["hits"]] == [4.0, 10.0]
+
+    # 3. Live endpoint check for grouped_videos field
+    res_ctx = client.get("/api/videos/L01_V001/context?timestamp_sec=10.0&window_sec=15.0")
+    frames = res_ctx.json().get("frames", [])
+    res_sim = client.post("/api/search/similar", json={"keyframe_id": frames[0]["keyframe_id"], "top_k": 15})
+    assert res_sim.status_code == 200
+    sim_body = res_sim.json()
+    assert "grouped_videos" in sim_body
+    assert len(sim_body["grouped_videos"]) >= 1
+    first_group = sim_body["grouped_videos"][0]
+    assert first_group["rank"] == 1
+    assert first_group["hits"] == sorted(first_group["hits"], key=lambda h: h["start_sec"])
+
+    print("[OK] Task 07C Video Grouping & Dual-Frame Sequential Contract tests passed!")
+
+
 if __name__ == "__main__":
     test_competition_server_endpoints()
     test_translate_endpoint()
     test_dres_collection_name_payload()
     test_task_07a_workstation_ui_and_post_search()
     test_task_07b_similarity_endpoint_and_ui()
+    test_task_07c_video_grouping_and_dual_frame_contracts()

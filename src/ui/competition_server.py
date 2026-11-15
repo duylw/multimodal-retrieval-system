@@ -420,6 +420,36 @@ def get_video_temporal_context(
     }
 
 
+def _normalize_stage_hits(cue_evidence: Any, fallback_vid: str) -> List[Dict[str, Any]]:
+    """Extracts sorted, thumbnail-resolved sequential stage evidence dicts."""
+    if not isinstance(cue_evidence, dict):
+        return []
+    raw_stage_hits = cue_evidence.get("sequence_stages", [])
+    if not isinstance(raw_stage_hits, list):
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+    for sh in raw_stage_hits:
+        if not isinstance(sh, dict):
+            continue
+        sh_kfid = str(sh.get("keyframe_id") or "")
+        sh_vid = str(sh.get("video_id") or fallback_vid)
+        sh_thumb = sh.get("thumbnail_url")
+        if not sh_thumb and sh_kfid:
+            sh_thumb = f"/api/keyframes/{sh_vid}/{sh_kfid}.jpg"
+        normalized.append({
+            "stage_index": int(sh.get("stage_index", len(normalized))),
+            "keyframe_id": sh_kfid,
+            "video_id": sh_vid,
+            "timestamp_sec": round(float(sh.get("timestamp_sec", 0.0)), 2),
+            "score": round(float(sh.get("score", 0.0)), 4),
+            "thumbnail_url": sh_thumb,
+        })
+
+    normalized.sort(key=lambda item: item["stage_index"])
+    return normalized
+
+
 def _serialize_moments(moments: List[Any]) -> List[Dict[str, Any]]:
     """Formats CandidateMoment instances into JSON-serializable UI dictionaries."""
     results: List[Dict[str, Any]] = []
@@ -427,7 +457,7 @@ def _serialize_moments(moments: List[Any]) -> List[Dict[str, Any]]:
         mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
         mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
         time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
-        stage_hits = m.cue_evidence.get("sequence_stages", []) if isinstance(m.cue_evidence, dict) else []
+        stage_hits = _normalize_stage_hits(m.cue_evidence, m.video_id)
 
         results.append({
             "rank": rank,
@@ -448,6 +478,45 @@ def _serialize_moments(moments: List[Any]) -> List[Dict[str, Any]]:
             "is_multimodal": True
         })
     return results
+
+
+def _group_results_by_video(
+    results: List[Dict[str, Any]],
+    max_hits_per_video: int = 7
+) -> List[Dict[str, Any]]:
+    """
+    Groups serialized moments by video_id ordered by peak score descending,
+    sorting up to max_hits_per_video top moments chronologically within each video.
+    """
+    if not results:
+        return []
+
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for item in results:
+        vid = str(item.get("video_id") or "")
+        if not vid:
+            continue
+        buckets.setdefault(vid, []).append(item)
+
+    sorted_groups = sorted(
+        buckets.items(),
+        key=lambda kv: max(float(h.get("score", 0.0)) for h in kv[1]),
+        reverse=True
+    )
+
+    grouped: List[Dict[str, Any]] = []
+    for rank, (vid, hits) in enumerate(sorted_groups, start=1):
+        top_score = max(float(h.get("score", 0.0)) for h in hits)
+        top_hits = sorted(hits, key=lambda h: float(h.get("score", 0.0)), reverse=True)[:max_hits_per_video]
+        chrono_hits = sorted(top_hits, key=lambda h: float(h.get("start_sec", 0.0)))
+        grouped.append({
+            "rank": rank,
+            "video_id": vid,
+            "top_score": round(top_score, 4),
+            "total_hits": len(hits),
+            "hits": chrono_hits
+        })
+    return grouped
 
 
 def _parse_optional_str_list(raw: Any) -> Optional[List[str]]:
@@ -497,6 +566,7 @@ def search_multimodal_endpoint(
         "mode": mode,
         "total_results": len(results),
         "candidates": results,
+        "grouped_videos": _group_results_by_video(results),
         "trace": trace
     }
 
@@ -533,6 +603,7 @@ def search_multimodal_post_endpoint(
         "mode": eff_mode,
         "total_results": len(results),
         "candidates": results,
+        "grouped_videos": _group_results_by_video(results),
         "trace": trace
     }
 
@@ -578,6 +649,7 @@ def search_similar_keyframes_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]
         "keyframe_id": keyframe_id,
         "total_results": len(results),
         "candidates": results,
+        "grouped_videos": _group_results_by_video(results),
         "trace": trace
     }
 
