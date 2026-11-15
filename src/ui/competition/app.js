@@ -49,10 +49,12 @@
       history: []
     },
 
-    // Task 06D: Query Translation State
+    // Task 06D & 07A: Query Translation State
     lastTranslation: {
       original: '',
-      translated: ''
+      translated: '',
+      originalScene2: '',
+      translatedScene2: ''
     }
   };
 
@@ -70,6 +72,14 @@
   const dom = {
     // Top Bar
     queryInput: document.getElementById('queryInput'),
+    ocrQueryInput: document.getElementById('ocrQueryInput'),
+    ocrRoleSelect: document.getElementById('ocrRoleSelect'),
+    toggleSequenceBtn: document.getElementById('toggleSequenceBtn'),
+    sequenceBuilderRow: document.getElementById('sequenceBuilderRow'),
+    scene2Input: document.getElementById('scene2Input'),
+    sequenceAnchorSelect: document.getElementById('sequenceAnchorSelect'),
+    sequenceGapSelect: document.getElementById('sequenceGapSelect'),
+    closeSequenceBtn: document.getElementById('closeSequenceBtn'),
     translateQueryBtn: document.getElementById('translateQueryBtn'),
     clearQueryBtn: document.getElementById('clearQueryBtn'),
     searchBtn: document.getElementById('searchBtn'),
@@ -91,6 +101,7 @@
     closeDresDrawerBtn: document.getElementById('closeDresDrawerBtn'),
     dresBaseUrl: document.getElementById('dresBaseUrl'),
     dresEvalId: document.getElementById('dresEvalId'),
+    dresCollectionName: document.getElementById('dresCollectionName'),
     dresSessionId: document.getElementById('dresSessionId'),
     dresUsername: document.getElementById('dresUsername'),
     dresPassword: document.getElementById('dresPassword'),
@@ -319,6 +330,7 @@
       // Populate config form
       if (data.base_url) dom.dresBaseUrl.value = data.base_url;
       if (data.evaluation_id) dom.dresEvalId.value = data.evaluation_id;
+      if (dom.dresCollectionName) dom.dresCollectionName.value = data.collection_name || '';
       if (data.session_id) dom.dresSessionId.value = data.session_id;
 
       renderSubmissionHistory(data.history || []);
@@ -331,6 +343,7 @@
     const payload = {
       base_url: dom.dresBaseUrl.value.trim(),
       evaluation_id: dom.dresEvalId.value.trim(),
+      collection_name: dom.dresCollectionName ? dom.dresCollectionName.value.trim() : '',
       session_id: dom.dresSessionId.value.trim(),
       username: dom.dresUsername.value.trim(),
       password: dom.dresPassword.value.trim()
@@ -487,6 +500,7 @@
       start_sec: Number(startSec) || 0.0,
       end_sec: Number(endSec) || 0.0,
       evaluation_id: dom.dresEvalId.value.trim() || state.dresStatus.evaluation_id,
+      collection_name: (dom.dresCollectionName ? dom.dresCollectionName.value.trim() : '') || state.dresStatus.collection_name || null,
       dry_run: dom.subDryRunCheck.checked,
       allow_duplicate: dom.subAllowDuplicateCheck.checked
     };
@@ -559,10 +573,13 @@
 
   async function translateCurrentQuery(force = false) {
     const raw = dom.queryInput.value.trim();
-    if (!raw) return raw;
+    const rawScene2 = dom.scene2Input ? dom.scene2Input.value.trim() : '';
+    if (!raw && !rawScene2) return raw;
 
     // Skip if identical to currently displayed translation unless forced
-    if (!force && state.lastTranslation.translated && raw === state.lastTranslation.translated) {
+    const s1Same = !raw || (state.lastTranslation.translated && raw === state.lastTranslation.translated);
+    const s2Same = !rawScene2 || (state.lastTranslation.translatedScene2 && rawScene2 === state.lastTranslation.translatedScene2);
+    if (!force && s1Same && s2Same) {
       return raw;
     }
 
@@ -572,41 +589,53 @@
     }
 
     try {
-      const res = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: raw,
-          source_lang: 'auto',
-          target_lang: 'en'
-        })
-      });
-
-      if (!res.ok) {
-        return raw;
+      let translated = raw;
+      if (raw) {
+        const res = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: raw, source_lang: 'auto', target_lang: 'en' })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const t1 = (data.translated_query || '').trim();
+          if (t1) translated = t1;
+        }
       }
 
-      const data = await res.json();
-      const translated = (data.translated_query || '').trim();
+      let translatedScene2 = rawScene2;
+      if (rawScene2) {
+        const res2 = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: rawScene2, source_lang: 'auto', target_lang: 'en' })
+        });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          const t2 = (data2.translated_query || '').trim();
+          if (t2) translatedScene2 = t2;
+        }
+      }
 
-      if (translated && translated !== raw) {
+      const changed = (translated && translated !== raw) || (translatedScene2 && translatedScene2 !== rawScene2);
+      if (changed) {
         state.lastTranslation = {
           original: raw,
-          translated: translated
+          translated: translated,
+          originalScene2: rawScene2,
+          translatedScene2: translatedScene2
         };
-        dom.queryInput.value = translated;
+        if (raw) dom.queryInput.value = translated;
+        if (rawScene2 && dom.scene2Input) dom.scene2Input.value = translatedScene2;
 
         // Display translation diff banner
         if (dom.translationDiffBanner && dom.diffOriginalText && dom.diffTranslatedText) {
-          dom.diffOriginalText.textContent = raw;
-          dom.diffTranslatedText.textContent = translated;
+          dom.diffOriginalText.textContent = rawScene2 ? `${raw} >> ${rawScene2}` : raw;
+          dom.diffTranslatedText.textContent = translatedScene2 ? `${translated} >> ${translatedScene2}` : translated;
           dom.translationDiffBanner.classList.remove('hidden');
         }
-
-        return translated;
-      } else {
-        return raw;
       }
+      return translated;
     } catch (err) {
       console.warn('[TRANSLATE WARN] Translation request failed:', err);
       return raw;
@@ -619,13 +648,15 @@
   }
 
   function revertTranslation() {
-    if (state.lastTranslation.original) {
-      const orig = state.lastTranslation.original;
-      dom.queryInput.value = orig;
+    if (state.lastTranslation.original || state.lastTranslation.originalScene2) {
+      dom.queryInput.value = state.lastTranslation.original || '';
+      if (dom.scene2Input && state.lastTranslation.originalScene2 !== undefined) {
+        dom.scene2Input.value = state.lastTranslation.originalScene2 || '';
+      }
       if (dom.translationDiffBanner) {
         dom.translationDiffBanner.classList.add('hidden');
       }
-      state.lastTranslation = { original: '', translated: '' };
+      state.lastTranslation = { original: '', translated: '', originalScene2: '', translatedScene2: '' };
       executeSearch(true); // skipAutoTranslate = true to prevent re-translation loop
     }
   }
@@ -714,36 +745,80 @@
 
   async function executeSearch(skipAutoTranslate = false) {
     let query = dom.queryInput.value.trim();
-    if (!query) {
+    const ocrText = dom.ocrQueryInput ? dom.ocrQueryInput.value.trim() : '';
+    const ocrMode = dom.ocrRoleSelect ? dom.ocrRoleSelect.value : 'boost';
+    let scene2Text = dom.scene2Input ? dom.scene2Input.value.trim() : '';
+
+    if (!query && !ocrText && !scene2Text) {
       dom.queryInput.focus();
       return;
     }
 
-    // Auto-translate if enabled, not explicitly skipped (e.g. on Revert), and query differs from last translation
-    if (!skipAutoTranslate && dom.autoTranslateCheck && dom.autoTranslateCheck.checked) {
-      if (query !== state.lastTranslation.translated) {
-        query = await translateCurrentQuery(false);
-      }
+    // Auto-translate visual descriptions (OCR input stays intact)
+    if (!skipAutoTranslate && dom.autoTranslateCheck && dom.autoTranslateCheck.checked && (query || scene2Text)) {
+      await translateCurrentQuery(false);
+      query = dom.queryInput.value.trim();
+      scene2Text = dom.scene2Input ? dom.scene2Input.value.trim() : '';
     }
 
-    // Save query to competition history
-    saveQueryToHistory(query);
+    const gapStr = dom.sequenceGapSelect ? dom.sequenceGapSelect.value : '1-30';
+    const [minGapStr, maxGapStr] = gapStr.split('-');
+    const minGapSec = parseFloat(minGapStr) || 1.0;
+    const maxGapSec = parseFloat(maxGapStr) || 30.0;
+    const anchorStage = dom.sequenceAnchorSelect ? (parseInt(dom.sequenceAnchorSelect.value, 10) || 0) : 0;
+
+    // Save query summary to competition history
+    const historyDisplay = [
+      query,
+      scene2Text ? `>> ${scene2Text}` : '',
+      ocrText ? `ocr: ${ocrText}` : ''
+    ].filter(Boolean).join(' ');
+    saveQueryToHistory(historyDisplay);
 
     dom.gridLoadingOverlay.classList.remove('hidden');
-    dom.candidateQueryEcho.textContent = `"${query}" (${state.searchMode})`;
+    dom.candidateQueryEcho.textContent = `"${historyDisplay}" (${state.searchMode}${ocrText ? ` + ocr:${ocrMode}` : ''})`;
 
-    const params = new URLSearchParams({
-      query: query,
-      mode: state.searchMode,
-      top_k: String(state.resultsLimit)
-    });
-
-    if (dom.targetVideoOnly.checked && state.activeVideoId) {
-      params.append('video_id', state.activeVideoId);
-    }
+    const vidFilter = (dom.targetVideoOnly.checked && state.activeVideoId) ? state.activeVideoId : null;
+    const useStructuredPost = Boolean(ocrText || scene2Text || query.includes('>>'));
 
     try {
-      const res = await fetch(`/api/search/multimodal?${params.toString()}`);
+      let res;
+      if (useStructuredPost) {
+        const bodyPayload = {
+          mode: state.searchMode,
+          top_k: state.resultsLimit,
+          video_id: vidFilter,
+          ocr_text: ocrText,
+          ocr_mode: ocrMode,
+          anchor_stage: anchorStage,
+          min_gap_sec: minGapSec,
+          max_gap_sec: maxGapSec
+        };
+
+        if (scene2Text) {
+          bodyPayload.scenes = [
+            { visual: query, ocr: ocrText },
+            { visual: scene2Text }
+          ];
+        } else {
+          bodyPayload.query = query;
+        }
+
+        res = await fetch('/api/search/multimodal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyPayload)
+        });
+      } else {
+        const params = new URLSearchParams({
+          query: query,
+          mode: state.searchMode,
+          top_k: String(state.resultsLimit)
+        });
+        if (vidFilter) params.append('video_id', vidFilter);
+        res = await fetch(`/api/search/multimodal?${params.toString()}`);
+      }
+
       if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.detail || 'Search query failed');
@@ -805,10 +880,21 @@
     else if (rankNum === 3) rankBadgeClass = 'bronze';
 
     // Overlaid Consensus badge
-    const matchedCues = candidate.matched_cues || 1;
-    const consensusHtml = matchedCues > 1 
-      ? `<span class="badge-consensus-overlay" title="Matched ${matchedCues} independent cues">Consensus: ${matchedCues}</span>` 
+    const matchedCues = Array.isArray(candidate.matched_cues)
+      ? candidate.matched_cues.length
+      : (candidate.matched_cues || 1);
+    const consensusHtml = matchedCues > 1
+      ? `<span class="badge-consensus-overlay" title="Matched ${matchedCues} independent cues">Consensus: ${matchedCues}</span>`
       : '';
+
+    // Sequence Timeline Pill (Task 07A)
+    let seqPillHtml = '';
+    if (Array.isArray(candidate.stage_hits) && candidate.stage_hits.length >= 2) {
+      const s0 = candidate.stage_hits[0];
+      const s1 = candidate.stage_hits[1];
+      const deltaSec = (Number(s1.timestamp_sec || 0) - Number(s0.timestamp_sec || 0)).toFixed(1);
+      seqPillHtml = `<div class="card-sequence-pill" title="Chronological sequence match">S1 ${formatTime(s0.timestamp_sec)} ➜ +${deltaSec}s ➜ S2 ${formatTime(s1.timestamp_sec)}</div>`;
+    }
 
     // DRES Batch Badge
     const batch = getVideoBatch(candidate.video_id);
@@ -847,6 +933,7 @@
           <span class="card-duration">(${dur}s)</span>
         </div>
 
+        ${seqPillHtml}
         ${ocrHtml}
 
         <div class="card-actions-row">
@@ -1231,8 +1318,42 @@
     }
     dom.clearQueryBtn.addEventListener('click', () => {
       dom.queryInput.value = '';
+      if (dom.ocrQueryInput) dom.ocrQueryInput.value = '';
+      if (dom.scene2Input) dom.scene2Input.value = '';
       dom.queryInput.focus();
     });
+
+    // Task 07A: Sequence Builder Toggle & Enter key support
+    if (dom.toggleSequenceBtn && dom.sequenceBuilderRow) {
+      dom.toggleSequenceBtn.addEventListener('click', () => {
+        const isHidden = dom.sequenceBuilderRow.classList.toggle('hidden');
+        dom.toggleSequenceBtn.classList.toggle('active', !isHidden);
+        if (!isHidden && dom.scene2Input) dom.scene2Input.focus();
+      });
+    }
+    if (dom.closeSequenceBtn && dom.sequenceBuilderRow) {
+      dom.closeSequenceBtn.addEventListener('click', () => {
+        dom.sequenceBuilderRow.classList.add('hidden');
+        if (dom.toggleSequenceBtn) dom.toggleSequenceBtn.classList.remove('active');
+        if (dom.scene2Input) dom.scene2Input.value = '';
+      });
+    }
+    if (dom.ocrQueryInput) {
+      dom.ocrQueryInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeSearch();
+        }
+      });
+    }
+    if (dom.scene2Input) {
+      dom.scene2Input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeSearch();
+        }
+      });
+    }
 
     // Modality Selector Pills
     dom.searchModePills.forEach(pill => {

@@ -420,6 +420,36 @@ def get_video_temporal_context(
     }
 
 
+def _serialize_moments(moments: List[Any]) -> List[Dict[str, Any]]:
+    """Formats CandidateMoment instances into JSON-serializable UI dictionaries."""
+    results: List[Dict[str, Any]] = []
+    for rank, m in enumerate(moments, start=1):
+        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
+        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
+        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
+        stage_hits = m.cue_evidence.get("sequence_stages", []) if isinstance(m.cue_evidence, dict) else []
+
+        results.append({
+            "rank": rank,
+            "score": m.score,
+            "video_id": m.video_id,
+            "start_sec": m.start_sec,
+            "end_sec": m.end_sec,
+            "start_ms": m.start_ms,
+            "end_ms": m.end_ms,
+            "formatted_time": time_str,
+            "matched_cues": m.matched_cues,
+            "keyframe_id": m.keyframe_id,
+            "thumbnail_url": m.thumbnail_url,
+            "text_detected": m.text_snippet,
+            "cue_evidence": m.cue_evidence,
+            "stage_hits": stage_hits,
+            "is_sequential": len(stage_hits) >= 2,
+            "is_multimodal": True
+        })
+    return results
+
+
 @app.get("/api/search/multimodal")
 def search_multimodal_endpoint(
     query: str,
@@ -444,28 +474,7 @@ def search_multimodal_endpoint(
         trace_top_hits=10
     )
 
-    results = []
-    for rank, m in enumerate(moments, start=1):
-        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
-        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
-        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
-
-        results.append({
-            "rank": rank,
-            "score": m.score,
-            "video_id": m.video_id,
-            "start_sec": m.start_sec,
-            "end_sec": m.end_sec,
-            "start_ms": m.start_ms,
-            "end_ms": m.end_ms,
-            "formatted_time": time_str,
-            "matched_cues": m.matched_cues,
-            "keyframe_id": m.keyframe_id,
-            "thumbnail_url": m.thumbnail_url,
-            "text_detected": m.text_snippet,
-            "cue_evidence": m.cue_evidence,
-            "is_multimodal": True
-        })
+    results = _serialize_moments(moments)
 
     return {
         "query": query,
@@ -483,42 +492,25 @@ def search_multimodal_post_endpoint(
     top_k: int = 300,
     video_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Structured Multi-Cue JSON search endpoint."""
+    """Structured Multi-Cue JSON search endpoint (Task 07A Visual-First OCR & Anchor-then-Scan)."""
+    eff_mode = str(payload.get("mode") or mode or "auto").strip()
+    eff_top_k = int(payload.get("top_k") or top_k or 300)
+    raw_vid = payload.get("video_id") if payload.get("video_id") is not None else video_id
+    vid_filter = str(raw_vid).strip() if raw_vid and str(raw_vid).strip() else None
+
     engine = get_search_engine()
-    vid_filter = video_id.strip() if video_id and video_id.strip() else None
     moments, trace = engine.search_with_trace(
         query=payload,
-        mode=mode,
-        top_k=top_k,
+        mode=eff_mode,
+        top_k=eff_top_k,
         video_id=vid_filter,
         trace_top_hits=10
     )
 
-    results = []
-    for rank, m in enumerate(moments, start=1):
-        mins_s, secs_s = int(m.start_sec // 60), m.start_sec % 60
-        mins_e, secs_e = int(m.end_sec // 60), m.end_sec % 60
-        time_str = f"{mins_s:02d}:{secs_s:05.2f} - {mins_e:02d}:{secs_e:05.2f}"
-
-        results.append({
-            "rank": rank,
-            "score": m.score,
-            "video_id": m.video_id,
-            "start_sec": m.start_sec,
-            "end_sec": m.end_sec,
-            "start_ms": m.start_ms,
-            "end_ms": m.end_ms,
-            "formatted_time": time_str,
-            "matched_cues": m.matched_cues,
-            "keyframe_id": m.keyframe_id,
-            "thumbnail_url": m.thumbnail_url,
-            "text_detected": m.text_snippet,
-            "cue_evidence": m.cue_evidence,
-            "is_multimodal": True
-        })
+    results = _serialize_moments(moments)
 
     return {
-        "mode": mode,
+        "mode": eff_mode,
         "total_results": len(results),
         "candidates": results,
         "trace": trace
@@ -660,6 +652,7 @@ def get_dres_status() -> Dict[str, Any]:
         "base_url": client.base_url,
         "session_id": client.session_id,
         "evaluation_id": _dres_eval_id,
+        "collection_name": client.collection_name,
         "is_authenticated": bool(client.session_id),
         "submitted_count": len(client._submitted_cache),
         "history": list(reversed(_dres_history[-30:]))
@@ -679,6 +672,9 @@ def configure_dres_session(payload: Dict[str, Any]) -> Dict[str, Any]:
     eval_id = str(payload.get("evaluation_id", "")).strip()
     if eval_id:
         _dres_eval_id = eval_id
+
+    if "collection_name" in payload:
+        client.set_collection_name(payload.get("collection_name"))
 
     session_id = str(payload.get("session_id", "")).strip()
     if session_id:
@@ -740,12 +736,19 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
     dry_run = bool(payload.get("dry_run", False))
     allow_duplicate = bool(payload.get("allow_duplicate", False))
 
+    client = get_dres_client()
+    raw_collection = payload.get("collection_name")
+    collection_name = (
+        str(raw_collection).strip() or None
+        if raw_collection is not None and str(raw_collection).strip()
+        else client.collection_name
+    )
+
     clean_id = format_media_item_name(video_id)
     start_ms = seconds_to_ms(start_sec)
     end_ms = seconds_to_ms(end_sec)
-    dres_payload = create_kis_submission_payload(clean_id, start_sec, end_sec)
+    dres_payload = create_kis_submission_payload(clean_id, start_sec, end_sec, collection_name=collection_name)
 
-    client = get_dres_client()
     cache_key = (eval_id, clean_id, start_ms, end_ms)
 
     # Check duplicate submission cache
@@ -790,7 +793,8 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
             video_id=clean_id,
             start_sec=start_sec,
             end_sec=end_sec,
-            allow_duplicate=allow_duplicate
+            allow_duplicate=allow_duplicate,
+            collection_name=collection_name
         )
         sub_status = str(server_resp.get("submission", server_resp.get("status", "SUBMITTED"))).upper()
         entry = {

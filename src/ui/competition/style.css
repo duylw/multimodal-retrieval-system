@@ -206,6 +206,156 @@ body.theme-dark {
   color: var(--text-main);
 }
 
+/* Task 07A: Inline OCR Role Input & Sequential Builder Bar */
+.ocr-inline-group {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  height: 34px;
+  overflow: hidden;
+  flex-shrink: 1;
+  min-width: 150px;
+  max-width: 215px;
+}
+
+.ocr-inline-input {
+  width: 100%;
+  min-width: 80px;
+  height: 100%;
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  outline: none;
+}
+
+.ocr-role-select {
+  height: 100%;
+  background: var(--bg-hover);
+  color: var(--accent-amber, #f59e0b);
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+.btn-toggle-sequence {
+  height: 34px;
+  padding: 0 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-toggle-sequence.active,
+.btn-toggle-sequence:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.sequence-builder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(14, 165, 233, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sequence-builder-row.hidden {
+  display: none;
+}
+
+.seq-stage-badge {
+  background: var(--accent-blue);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.seq-scene-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.seq-scene-input:focus {
+  border-color: var(--border-focus);
+}
+
+.seq-param-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.seq-param-select {
+  height: 26px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  outline: none;
+}
+
+.btn-seq-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+
+.btn-seq-close:hover {
+  color: var(--text-main);
+}
+
+.card-sequence-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .search-controls-bar {
   display: flex;
   align-items: center;

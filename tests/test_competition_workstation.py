@@ -91,6 +91,74 @@ def test_translate_endpoint():
     print("[OK] Task 06D Translation endpoint tests passed!")
 
 
+def test_dres_collection_name_payload():
+    """Verify optional mediaItemCollectionName support in DRES session & submit endpoints."""
+    client = TestClient(app)
+
+    # Clear cache first
+    client.post("/api/dres/clear-cache")
+
+    # 1. Configure collection_name via /api/dres/session
+    res_cfg = client.post("/api/dres/session", json={"collection_name": "AIC24_Batch1"})
+    assert res_cfg.status_code == 200
+    assert res_cfg.json().get("collection_name") == "AIC24_Batch1"
+
+    # 2. Submit dry-run and verify mediaItemCollectionName is present
+    res_sub = client.post("/api/dres/submit", json={
+        "video_id": "L15_V015",
+        "start_sec": 10.0,
+        "end_sec": 15.0,
+        "dry_run": True
+    })
+    assert res_sub.status_code == 200
+    answer = res_sub.json()["payload"]["answerSets"][0]["answers"][0]
+    assert answer["mediaItemName"] == "L15_V015"
+    assert answer["mediaItemCollectionName"] == "AIC24_Batch1"
+
+    # 3. Clear collection_name and verify mediaItemCollectionName is omitted
+    res_clear_cfg = client.post("/api/dres/session", json={"collection_name": ""})
+    assert res_clear_cfg.status_code == 200
+    assert res_clear_cfg.json().get("collection_name") is None
+
+    res_sub2 = client.post("/api/dres/submit", json={
+        "video_id": "L15_V015",
+        "start_sec": 20.0,
+        "end_sec": 25.0,
+        "dry_run": True
+    })
+    assert res_sub2.status_code == 200
+    answer2 = res_sub2.json()["payload"]["answerSets"][0]["answers"][0]
+    assert "mediaItemCollectionName" not in answer2
+
+    print("[OK] DRES mediaItemCollectionName tests passed!")
+
+
+def test_task_07a_workstation_ui_and_post_search():
+    """Verify Task 07A UI controls and structured POST /api/search/multimodal contract."""
+    client = TestClient(app)
+
+    res_html = client.get("/")
+    assert res_html.status_code == 200
+    html = res_html.text
+    for elem_id in ("ocrQueryInput", "ocrRoleSelect", "toggleSequenceBtn", "scene2Input", "sequenceAnchorSelect", "sequenceGapSelect"):
+        assert elem_id in html, f"Missing Task 07A element {elem_id} in index.html"
+
+    # Structured OCR-only POST search via ocr_text + mode="ocr"
+    res_post = client.post("/api/search/multimodal", json={
+        "ocr_text": "trùng biển số",
+        "mode": "ocr",
+        "top_k": 5
+    })
+    assert res_post.status_code == 200
+    body = res_post.json()
+    assert body["total_results"] > 0
+    assert "stage_hits" in body["candidates"][0]
+
+    print("[OK] Task 07A Competition Workstation UI & POST search contract tests passed!")
+
+
 if __name__ == "__main__":
     test_competition_server_endpoints()
     test_translate_endpoint()
+    test_dres_collection_name_payload()
+    test_task_07a_workstation_ui_and_post_search()

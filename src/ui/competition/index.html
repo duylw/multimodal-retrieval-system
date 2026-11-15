@@ -37,6 +37,24 @@
         <button id="clearQueryBtn" class="btn-clear-query" title="Clear query (Esc)">X</button>
       </div>
 
+      <div class="ocr-inline-group" title="Optional On-Screen Text (never translated; kept intact for EasyOCR FTS5)">
+        <input
+          type="text"
+          id="ocrQueryInput"
+          class="ocr-inline-input"
+          placeholder="OCR text (optional)..."
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <select id="ocrRoleSelect" class="ocr-role-select" title="OCR Hybrid Role: Boost (Visual-primary bonus) or Filter (Must contain OCR text)">
+          <option value="boost" selected>Boost</option>
+          <option value="filter">Filter</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+
+      <button id="toggleSequenceBtn" class="btn-toggle-sequence" title="Add Scene 2 for Anchor-then-Scan sequential search">+ Scene</button>
+
       <div class="search-controls-bar">
         <div class="search-mode-selector">
           <label class="mode-pill active"><input type="radio" name="searchMode" value="auto" checked> Hybrid</label>
@@ -112,6 +130,10 @@
       <div class="form-group">
         <label for="dresEvalId">Active Evaluation ID</label>
         <input type="text" id="dresEvalId" value="offline_kis_eval" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="dresCollectionName">Media Collection Name (Optional)</label>
+        <input type="text" id="dresCollectionName" placeholder="e.g. AIC24 (leave blank if default)" class="form-input">
       </div>
       <div class="form-group">
         <label for="dresSessionId">Session Token (Optional)</label>
@@ -265,8 +287,37 @@
     <!-- RIGHT MAIN CANVAS: HIGH-DENSITY FRAME GRID -->
     <section class="candidate-canvas-main" id="candidateCanvasMain">
 
-      <!-- Task 06D: Query Accelerators Bar (History Chips & Translation Diff Banner) -->
+      <!-- Task 06D & 07A: Query Accelerators Bar & Multi-Stage Sequence Builder -->
       <div class="query-accelerators-bar" id="queryAcceleratorsBar">
+        <div class="sequence-builder-row hidden" id="sequenceBuilderRow">
+          <span class="seq-stage-badge">SCENE 2</span>
+          <input
+            type="text"
+            id="scene2Input"
+            class="seq-scene-input"
+            placeholder="Next chronological scene description (Scene 2)..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <label class="seq-param-label" title="Designate which scene is rarer/clearer as the search Anchor">
+            <span>Anchor:</span>
+            <select id="sequenceAnchorSelect" class="seq-param-select">
+              <option value="0" selected>Scene 1</option>
+              <option value="1">Scene 2</option>
+            </select>
+          </label>
+          <label class="seq-param-label" title="Allowed chronological time gap between Scene 1 and Scene 2">
+            <span>Gap:</span>
+            <select id="sequenceGapSelect" class="seq-param-select">
+              <option value="1-15">1-15s</option>
+              <option value="1-30" selected>1-30s</option>
+              <option value="1-60">1-60s</option>
+              <option value="2-120">2-120s</option>
+            </select>
+          </label>
+          <button id="closeSequenceBtn" class="btn-seq-close" title="Close Scene 2 builder">X</button>
+        </div>
+
         <div class="history-chips-container" id="historyChipsContainer">
           <span class="history-chips-label">Recent:</span>
           <div class="history-chips-scroll" id="historyChipsScroll">
