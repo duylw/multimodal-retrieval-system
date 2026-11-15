@@ -10,8 +10,8 @@
 ## 1. Overall Status
 
 * **Current Stage:** **Milestone 5: Competition Retrieval & Cockpit Optimization (`Task 07A` - `Task 07D`)**
-* **Overall Progress:** `Milestone 0-4 Extension Completed; Milestone 5 In Progress (2/4 Tasks Completed)`
-* **Current Focus:** Completed [Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md) (Instant Keyframe Similarity, Negative Visuals & Active Filtering); next step is [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md).
+* **Overall Progress:** `Milestone 0-4 Extension Completed; Milestone 5 In Progress (3/4 Tasks Completed)`
+* **Current Focus:** Completed [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) (Video Grouping View & Dual-Frame Sequence Cards); next step is [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md).
 
 ---
 
@@ -33,7 +33,7 @@
 | **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Completed** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) |
 | **Task 07A** | Visual-First OCR Fusion & Anchor-then-Scan Sequence | Preserved standalone OCR; quality-gated OCR Boost/Filter, disabled heuristic hijack, 2-phase FAISS reconstruct sequential linking | **Completed** | [task-07a](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md) | [metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py), [query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py), [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
 | **Task 07B** | Keyframe Similarity Search & Active Filtering | 0ms FAISS `reconstruct` image similarity, `-v:` exclude bar, session video blacklist, batch scope picker | **Completed** | [task-07b](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md) | [query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py), [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
-| **Task 07C** | Video Grouping View & Dual-Frame Sequence Cards | Chronological `By Video` horizontal strips, paired `Stage 1 -> (+Δt) -> Stage 2` cards | **Pending** | [task-07c](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
+| **Task 07C** | Video Grouping View & Dual-Frame Sequence Cards | Chronological `By Video` horizontal strips, paired `Stage 1 -> (+Δt) -> Stage 2` cards | **Completed** | [task-07c](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py) |
 | **Task 07D** | Zero-Popup Cockpit Layout & Timeline Hit Markers | Compact header stopwatch, persistent right-hand Verification & Submit Dock, inline `+-10s` strip, scrubber hit ticks | **Pending** | [task-07d](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md) | [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) |
 
 ---
@@ -67,7 +67,7 @@
 * [ ] **Milestone 5: Competition Retrieval & Cockpit Optimization** (In Progress Nov 15, 2026)
   * [x] Visual-First OCR (`Boost` / `Filter`) & Two-Phase Anchor-then-Scan Sequential Linking ([Task 07A](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md)).
   * [x] Instant Keyframe Similarity (`0ms` FAISS reconstruct), Exclude (`-v`), Video Blacklist, & Batch Scope Filter ([Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md)).
-  * [ ] Video Grouping Strips (`By Video`) & Dual-Frame Sequential Result Cards ([Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md)).
+  * [x] Video Grouping Strips (`By Video`) & Dual-Frame Sequential Result Cards ([Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md)).
   * [ ] Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer ([Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md)).
 
 ---
@@ -225,11 +225,15 @@
       * Exposed `POST /api/search/similar` and active filtering parameters in [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py).
       * Added `[Ref: ...]` similarity pill, `Sim` actions on candidate cards and filmstrip frames, `-v Exclude` box with auto VI->EN translation, `[Hide]`/`[Only]` card pruning controls with `Hidden: N videos [Reset]`, and configurable `[Batches]` scope popover in [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition).
       * Verified with `test_task_07b_similarity_and_active_filtering` and `test_task_07b_similarity_endpoint_and_ui`.
+    * Implemented and verified **[Task 07C: Video Grouping View & Dual-Frame Sequential Result Cards](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md)**:
+      * Added `_normalize_stage_hits()` and `_group_results_by_video()` in [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), returning normalized `stage_hits` and server-side `grouped_videos` arrays across multimodal and similarity endpoints.
+      * Implemented instantaneous **`[Frames | By Video]`** view switcher persisted in `localStorage` (`kis_canvas_view_mode`) with chronological per-video strip rows (up to 7 hits per video) and `[Only]` / `[Hide]` / `[Sim]` / `[Submit]` controls in [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition).
+      * Upgraded sequential result cards to render side-by-side **Dual-Frame Sequence Previews** (`S1 -> (+Δt) -> S2`) where clicking either pane seeks the player directly to `t1` or `t2` while setting default target range bounds cleanly.
+      * Verified with `test_task_07c_video_grouping_and_dual_frame_contracts` in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
 
 ---
 
 ## 5. Next Action
-* **Implement remaining Milestone 5 tasks sequentially starting with [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md):**
-  1. [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md): Video Grouping Strip View (`By Video`) & Dual-Frame Sequence Cards.
-  2. [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md): Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer.
+* **Implement remaining Milestone 5 task:**
+  1. [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md): Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer.
 
