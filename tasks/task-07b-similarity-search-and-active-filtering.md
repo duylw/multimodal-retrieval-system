@@ -1,6 +1,6 @@
 # Task 07B: Instant Keyframe Similarity Search, Negative Visuals & Active Filtering
 
-**Status:** `[PENDING]` Pending
+**Status:** `[DONE]` Completed
 **Target Milestone:** Milestone 5 (Competition Retrieval & Cockpit Optimization)
 **Core Modules:** [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py)
 **Server Component:** [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py)
