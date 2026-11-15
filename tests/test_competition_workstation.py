@@ -346,6 +346,65 @@ def test_task_07d_cockpit_layout_and_hit_markers() -> None:
     print("[OK] Task 07D Split Cockpit Layout & Timeline Hit Markers tests passed!")
 
 
+def test_dres_explicit_evaluation_id_preserved():
+    """Verify explicit evaluation_id is not overwritten by auto-detection during login or submit."""
+    import src.ui.competition_server as cs
+
+    client = TestClient(app)
+    dres = cs.get_dres_client()
+    orig_login = dres.login
+    orig_get_active = dres.get_active_evaluation
+    orig_eval_id = cs._dres_eval_id
+    orig_session_id = dres.session_id
+
+    try:
+        def fake_login(username: str, password: str) -> str:
+            dres.set_session_id("mock_session_123")
+            return "mock_session_123"
+
+        dres.login = fake_login
+        dres.get_active_evaluation = lambda: {"id": "bcb482c6-2b9e-4908-877a-e5ccd7c04640", "name": "Eval 1"}
+
+        # 1. Default evaluation_id ("offline_kis_eval") auto-detects active evaluation on login
+        res_auto = client.post("/api/dres/session", json={
+            "evaluation_id": "offline_kis_eval",
+            "username": "team06",
+            "password": "secret"
+        })
+        assert res_auto.status_code == 200
+        assert res_auto.json().get("evaluation_id") == "bcb482c6-2b9e-4908-877a-e5ccd7c04640"
+
+        # 2. Explicit custom evaluation_id MUST NOT be overwritten even when username/password are sent
+        res_explicit = client.post("/api/dres/session", json={
+            "evaluation_id": "custom-eval-2222-3333",
+            "username": "team06",
+            "password": "secret"
+        })
+        assert res_explicit.status_code == 200
+        assert res_explicit.json().get("evaluation_id") == "custom-eval-2222-3333"
+
+        # 3. Submitting with an explicit evaluation_id persists it for subsequent /api/dres/status reads
+        client.post("/api/dres/clear-cache")
+        res_sub = client.post("/api/dres/submit", json={
+            "video_id": "L15_V015",
+            "start_sec": 12.0,
+            "end_sec": 17.0,
+            "evaluation_id": "submit-eval-7777",
+            "dry_run": True
+        })
+        assert res_sub.status_code == 200
+        assert res_sub.json().get("evaluation_id") == "submit-eval-7777"
+        assert client.get("/api/dres/status").json().get("evaluation_id") == "submit-eval-7777"
+    finally:
+        dres.login = orig_login
+        dres.get_active_evaluation = orig_get_active
+        dres.set_session_id(orig_session_id)
+        cs._dres_eval_id = orig_eval_id
+        client.post("/api/dres/clear-cache")
+
+    print("[OK] DRES explicit evaluation_id preservation tests passed!")
+
+
 if __name__ == "__main__":
     test_competition_server_endpoints()
     test_translate_endpoint()
@@ -354,3 +413,4 @@ if __name__ == "__main__":
     test_task_07b_similarity_endpoint_and_ui()
     test_task_07c_video_grouping_and_dual_frame_contracts()
     test_task_07d_cockpit_layout_and_hit_markers()
+    test_dres_explicit_evaluation_id_preserved()
