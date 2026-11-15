@@ -450,12 +450,26 @@ def _serialize_moments(moments: List[Any]) -> List[Dict[str, Any]]:
     return results
 
 
+def _parse_optional_str_list(raw: Any) -> Optional[List[str]]:
+    """Normalizes optional CSV strings or JSON arrays into clean string lists."""
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str):
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        return parts
+    return None
+
+
 @app.get("/api/search/multimodal")
 def search_multimodal_endpoint(
     query: str,
     mode: str = "auto",
     top_k: int = 300,
-    video_id: Optional[str] = None
+    video_id: Optional[str] = None,
+    allowed_batches: Optional[str] = None,
+    excluded_videos: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Unified Multimodal Search: Multi-cue RRF fusion, 5s sliding window, trace, and NMS.
@@ -471,7 +485,9 @@ def search_multimodal_endpoint(
         mode=mode,
         top_k=top_k,
         video_id=vid_filter,
-        trace_top_hits=10
+        trace_top_hits=10,
+        allowed_batches=_parse_optional_str_list(allowed_batches),
+        excluded_videos=_parse_optional_str_list(excluded_videos)
     )
 
     results = _serialize_moments(moments)
@@ -497,6 +513,8 @@ def search_multimodal_post_endpoint(
     eff_top_k = int(payload.get("top_k") or top_k or 300)
     raw_vid = payload.get("video_id") if payload.get("video_id") is not None else video_id
     vid_filter = str(raw_vid).strip() if raw_vid and str(raw_vid).strip() else None
+    allowed_batches = _parse_optional_str_list(payload.get("allowed_batches"))
+    excluded_videos = _parse_optional_str_list(payload.get("excluded_videos"))
 
     engine = get_search_engine()
     moments, trace = engine.search_with_trace(
@@ -504,13 +522,60 @@ def search_multimodal_post_endpoint(
         mode=eff_mode,
         top_k=eff_top_k,
         video_id=vid_filter,
-        trace_top_hits=10
+        trace_top_hits=10,
+        allowed_batches=allowed_batches,
+        excluded_videos=excluded_videos
     )
 
     results = _serialize_moments(moments)
 
     return {
         "mode": eff_mode,
+        "total_results": len(results),
+        "candidates": results,
+        "trace": trace
+    }
+
+
+@app.post("/api/search/similar")
+def search_similar_keyframes_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    0ms-inference Keyframe Similarity Search via FAISS IndexFlatIP.reconstruct(),
+    supporting optional text steering, negative cues, batch scope, and video exclusions.
+    """
+    keyframe_id = str(payload.get("keyframe_id") or "").strip()
+    if not keyframe_id:
+        raise HTTPException(status_code=400, detail="keyframe_id is required.")
+
+    steer_text = payload.get("steer_text")
+    steer_alpha = float(payload.get("steer_alpha", 0.3))
+    neg_cues = _parse_optional_str_list(payload.get("negative_visual_queries"))
+    top_k = int(payload.get("top_k") or 300)
+    raw_vid = payload.get("video_id")
+    vid_filter = str(raw_vid).strip() if raw_vid and str(raw_vid).strip() else None
+    allowed_batches = _parse_optional_str_list(payload.get("allowed_batches"))
+    excluded_videos = _parse_optional_str_list(payload.get("excluded_videos"))
+
+    engine = get_search_engine()
+    try:
+        moments, trace = engine.search_by_keyframe(
+            keyframe_id=keyframe_id,
+            steer_text=str(steer_text).strip() if steer_text else None,
+            steer_alpha=steer_alpha,
+            negative_cues=neg_cues,
+            top_k=top_k,
+            video_id=vid_filter,
+            allowed_batches=allowed_batches,
+            excluded_videos=excluded_videos,
+            trace_top_hits=10
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+
+    results = _serialize_moments(moments)
+    return {
+        "mode": "similar",
+        "keyframe_id": keyframe_id,
         "total_results": len(results),
         "candidates": results,
         "trace": trace

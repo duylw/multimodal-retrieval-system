@@ -157,8 +157,71 @@ def test_task_07a_workstation_ui_and_post_search():
     print("[OK] Task 07A Competition Workstation UI & POST search contract tests passed!")
 
 
+def test_task_07b_similarity_endpoint_and_ui():
+    """Verify Task 07B UI controls, batch scope, video blacklist, and 0ms POST /api/search/similar."""
+    client = TestClient(app)
+
+    # 1. Verify UI HTML includes Task 07B controls
+    res_html = client.get("/")
+    assert res_html.status_code == 200
+    html = res_html.text
+    for elem_id in (
+        "refKeyframePill",
+        "clearRefKeyframeBtn",
+        "negativeQueryInput",
+        "batchScopeBtn",
+        "batchScopePopover",
+        "excludedVideosBar",
+        "resetExcludedVideosBtn",
+        "simActiveBar",
+        "exitSimModeBtn",
+    ):
+        assert elem_id in html, f"Missing Task 07B element {elem_id} in index.html"
+
+    # 2. Validation checks on /api/search/similar
+    res_bad = client.post("/api/search/similar", json={"keyframe_id": ""})
+    assert res_bad.status_code == 400
+
+    res_missing = client.post("/api/search/similar", json={"keyframe_id": "L99_V999_99999"})
+    assert res_missing.status_code == 404
+
+    # 3. Live 0ms similarity search on indexed keyframe from L01_V001
+    res_ctx = client.get("/api/videos/L01_V001/context?timestamp_sec=10.0&window_sec=15.0")
+    assert res_ctx.status_code == 200
+    frames = res_ctx.json().get("frames", [])
+    assert frames, "Expected frames in L01_V001 temporal context"
+    target_kfid = frames[0]["keyframe_id"]
+
+    res_sim = client.post("/api/search/similar", json={
+        "keyframe_id": target_kfid,
+        "top_k": 10
+    })
+    assert res_sim.status_code == 200
+    sim_body = res_sim.json()
+    assert sim_body["mode"] == "similar"
+    assert sim_body["total_results"] > 0
+    assert sim_body["candidates"][0]["video_id"] == "L01_V001"
+    assert sim_body["candidates"][0]["keyframe_id"] == target_kfid
+
+    # 4. Active exclusion + batch scope filtering via /api/search/similar
+    res_filtered = client.post("/api/search/similar", json={
+        "keyframe_id": target_kfid,
+        "excluded_videos": ["L01_V001"],
+        "allowed_batches": ["L02", "L03"],
+        "top_k": 5
+    })
+    assert res_filtered.status_code == 200
+    filt_body = res_filtered.json()
+    for c in filt_body["candidates"]:
+        assert c["video_id"] != "L01_V001"
+        assert c["video_id"].startswith(("L02_", "L03_"))
+
+    print("[OK] Task 07B Similarity Search Endpoint & Workstation UI tests passed!")
+
+
 if __name__ == "__main__":
     test_competition_server_endpoints()
     test_translate_endpoint()
     test_dres_collection_name_payload()
     test_task_07a_workstation_ui_and_post_search()
+    test_task_07b_similarity_endpoint_and_ui()
