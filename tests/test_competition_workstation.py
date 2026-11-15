@@ -302,6 +302,50 @@ def test_task_07c_video_grouping_and_dual_frame_contracts() -> None:
     print("[OK] Task 07C Video Grouping & Dual-Frame Sequential Contract tests passed!")
 
 
+def test_task_07d_cockpit_layout_and_hit_markers() -> None:
+    """Verifies Task 07D Zero-Popup Split Cockpit layout, header timer capsule, and hit marker assets."""
+    client = TestClient(app)
+
+    html = client.get("/").text
+    for marker in (
+        "headerTimerCapsule",
+        "timerDetailsBtn",
+        "timerDetailsPopover",
+        "stopwatchClock",
+        "predictedTotalScore",
+        "dockedPlayerPanel",
+        "dockedPlayerTitle",
+        "expandPopupBtn",
+        "cockpitSubmitDock",
+        "timelineHitMarkers",
+        'id="layoutModeLabel">Cockpit<',
+        'id="dockedPlayerPanel" class="docked-player-panel"',
+    ):
+        assert marker in html, f"Missing Task 07D cockpit marker {marker} in index.html"
+
+    # Left command sidebar should no longer squeeze the canvas grid
+    assert 'id="kisCommandSidebar"' not in html
+
+    js_src = client.get("/app.js").text
+    for js_symbol in (
+        "layoutMode: 'docked'",
+        "renderTimelineHitMarkers",
+        "expandDockedToPopup",
+        "window_sec=10.0",
+    ):
+        assert js_symbol in js_src, f"Missing Task 07D JS symbol {js_symbol} in app.js"
+
+    css_src = client.get("/style.css").text
+    for css_cls in (
+        ".header-timer-capsule",
+        ".cockpit-submit-dock",
+        ".timeline-hit-marker",
+    ):
+        assert css_cls in css_src, f"Missing Task 07D CSS rule {css_cls} in style.css"
+
+    print("[OK] Task 07D Split Cockpit Layout & Timeline Hit Markers tests passed!")
+
+
 if __name__ == "__main__":
     test_competition_server_endpoints()
     test_translate_endpoint()
@@ -309,3 +353,4 @@ if __name__ == "__main__":
     test_task_07a_workstation_ui_and_post_search()
     test_task_07b_similarity_endpoint_and_ui()
     test_task_07c_video_grouping_and_dual_frame_contracts()
+    test_task_07d_cockpit_layout_and_hit_markers()
