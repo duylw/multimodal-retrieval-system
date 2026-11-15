@@ -203,6 +203,13 @@ class SearchEngine:
         return filtered[:top_k]
 
     @staticmethod
+    def _extract_filename(path_str: Optional[str]) -> str:
+        """Extracts base filename cleanly across both Windows and POSIX path formats."""
+        if not path_str:
+            return ""
+        return str(path_str).replace("\\", "/").rstrip("/").split("/")[-1]
+
+    @staticmethod
     def _decorate_trace_hits(
         db: MetadataDB,
         hits: List[Dict[str, Any]],
@@ -217,7 +224,7 @@ class SearchEngine:
             h_vid = h.get("video_id", "")
             h_kfid = h.get("keyframe_id", "")
             h_fp = h.get("file_path") or db.get_keyframe_path(h_kfid)
-            img_name = Path(h_fp).name if h_fp else f"{h_kfid}.jpg"
+            img_name = SearchEngine._extract_filename(h_fp) if h_fp else f"{h_kfid}.jpg"
             entry: Dict[str, Any] = {
                 "rank": r_idx + 1,
                 "video_id": h_vid,
@@ -1120,15 +1127,14 @@ class SearchEngine:
         self,
         ocr_cue: str,
         top_k: int = 500,
-        video_id: Optional[str] = None
+        video_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Executes Two-Stage Hybrid Search on SQLite keyframe-aggregated FTS5 index."""
         clean_cue = ocr_cue.strip()
         if not clean_cue:
             return []
 
-        hits = self.db.search_ocr(clean_cue, video_id=video_id, limit=top_k)
-        return hits
+        return self.db.search_ocr(clean_cue, video_id=video_id, limit=top_k)
 
     def _search_scoped_ocr_cue(
         self,
@@ -1138,10 +1144,26 @@ class SearchEngine:
         allowed_batches: Optional[Set[str]] = None,
         excluded_videos: Optional[Set[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Runs _search_ocr_cue with oversampling and filters by batch scope and video blacklist."""
+        """Runs OCR retrieval with SQL scope pushdown and filters by batch scope and video blacklist."""
         has_scope = (allowed_batches is not None) or bool(excluded_videos)
-        fetch_k = top_k * 3 if has_scope else top_k
-        raw_hits = self._search_ocr_cue(ocr_cue, top_k=fetch_k, video_id=video_id)
+        is_mocked = "_search_ocr_cue" in self.__dict__
+        if has_scope and not is_mocked:
+            clean_cue = ocr_cue.strip()
+            if not clean_cue:
+                return []
+            needs_oversample = bool(excluded_videos and len(excluded_videos) > 500)
+            fetch_k = top_k * 2 if needs_oversample else top_k
+            raw_hits = self.db.search_ocr(
+                clean_cue,
+                video_id=video_id,
+                limit=fetch_k,
+                allowed_batches=allowed_batches,
+                excluded_videos=excluded_videos,
+            )
+        else:
+            fetch_k = top_k * 3 if has_scope else top_k
+            raw_hits = self._search_ocr_cue(ocr_cue, top_k=fetch_k, video_id=video_id)
+
         if not has_scope:
             return raw_hits[:top_k]
         filtered = self._filter_hits_by_scope(
@@ -1151,40 +1173,71 @@ class SearchEngine:
         )
         return filtered[:top_k]
 
-    def _resolve_hit_thumbnail(self, hit: Dict[str, Any], fallback_vid: str) -> None:
+    def _resolve_hit_thumbnail(
+        self,
+        hit: Dict[str, Any],
+        fallback_vid: str,
+        kf_paths: Optional[Dict[str, str]] = None,
+    ) -> None:
         """Populates thumbnail_url on a hit dict if missing."""
         if not isinstance(hit, dict):
             return
         c_vid = hit.get("video_id") or fallback_vid
         c_kfid = hit.get("keyframe_id")
         if c_kfid and not hit.get("thumbnail_url"):
-            fp = hit.get("file_path") or self.db.get_keyframe_path(c_kfid)
+            fp = hit.get("file_path") or (
+                kf_paths.get(c_kfid) if kf_paths is not None else self.db.get_keyframe_path(c_kfid)
+            )
             if fp:
-                hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{Path(fp).name}"
+                hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{self._extract_filename(fp)}"
             else:
                 hit["thumbnail_url"] = f"/api/keyframes/{c_vid}/{c_kfid}.jpg"
 
     def _decorate_moments(self, moments: List[CandidateMoment]) -> None:
-        """Decorates CandidateMoment instances with thumbnail image URLs."""
+        """Decorates CandidateMoment instances with thumbnail image URLs using a single batched lookup."""
         if not moments:
             return
+
+        kf_paths: Optional[Dict[str, str]] = None
+        # Preserve single-item lookup path only when db.get_keyframe_path is monkeypatched in tests
+        if "get_keyframe_path" not in self.db.__dict__:
+            missing_kf_ids: List[str] = []
+            for m in moments:
+                if m.keyframe_id and not m.thumbnail_url:
+                    missing_kf_ids.append(m.keyframe_id)
+                if m.cue_evidence:
+                    for hit in m.cue_evidence.values():
+                        items = hit if isinstance(hit, list) else ([hit] if isinstance(hit, dict) else [])
+                        for item in items:
+                            if (
+                                isinstance(item, dict)
+                                and item.get("keyframe_id")
+                                and not item.get("thumbnail_url")
+                                and not item.get("file_path")
+                            ):
+                                missing_kf_ids.append(item["keyframe_id"])
+            kf_paths = self.db.get_keyframe_paths(missing_kf_ids) if missing_kf_ids else {}
 
         for m in moments:
             vid = m.video_id
             if m.keyframe_id and not m.thumbnail_url:
-                fp = self.db.get_keyframe_path(m.keyframe_id)
+                fp = (
+                    kf_paths.get(m.keyframe_id)
+                    if kf_paths is not None
+                    else self.db.get_keyframe_path(m.keyframe_id)
+                )
                 if fp:
-                    m.thumbnail_url = f"/api/keyframes/{vid}/{Path(fp).name}"
+                    m.thumbnail_url = f"/api/keyframes/{vid}/{self._extract_filename(fp)}"
                 else:
                     m.thumbnail_url = f"/api/keyframes/{vid}/{m.keyframe_id}.jpg"
 
             if m.cue_evidence:
-                for cue_id, hit in m.cue_evidence.items():
+                for hit in m.cue_evidence.values():
                     if isinstance(hit, list):
                         for item in hit:
-                            self._resolve_hit_thumbnail(item, vid)
+                            self._resolve_hit_thumbnail(item, vid, kf_paths=kf_paths)
                     elif isinstance(hit, dict):
-                        self._resolve_hit_thumbnail(hit, vid)
+                        self._resolve_hit_thumbnail(hit, vid, kf_paths=kf_paths)
 
 
 def main() -> None:

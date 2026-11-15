@@ -9,10 +9,12 @@ import sqlite3
 import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from loguru import logger
 
 from src.common.types import ShotRecord, KeyframeRecord, OCRRecord
+
+_WORD_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def fold_vietnamese(text: str) -> str:
@@ -377,6 +379,27 @@ class MetadataDB:
             row = cursor.fetchone()
             return row["file_path"] if row else None
 
+    def get_keyframe_paths(self, keyframe_ids: Sequence[str]) -> Dict[str, str]:
+        """Batch retrieves file_path mappings for multiple keyframe_ids using a single connection."""
+        unique_ids = list(dict.fromkeys(kf for kf in keyframe_ids if kf))
+        if not unique_ids:
+            return {}
+
+        paths: Dict[str, str] = {}
+        chunk_size = 900
+        with self._get_connection() as conn:
+            for start in range(0, len(unique_ids), chunk_size):
+                chunk = unique_ids[start:start + chunk_size]
+                placeholders = ", ".join(["?"] * len(chunk))
+                rows = conn.execute(
+                    f"SELECT keyframe_id, file_path FROM keyframes WHERE keyframe_id IN ({placeholders});",
+                    tuple(chunk),
+                ).fetchall()
+                for row in rows:
+                    if row["file_path"]:
+                        paths[row["keyframe_id"]] = row["file_path"]
+        return paths
+
     def get_videos(self) -> List[Dict[str, Any]]:
         """Retrieves catalog list of all recorded videos."""
         with self._get_connection() as conn:
@@ -507,11 +530,46 @@ class MetadataDB:
                 for r in rows
             ]
 
+    @staticmethod
+    def _build_ocr_scope_sql(
+        video_id: Optional[str] = None,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None,
+    ) -> Tuple[str, List[Any], bool]:
+        """Builds parameterized SQL scope predicates for video_id, batch prefixes, and exclusions."""
+        clauses: List[str] = []
+        params: List[Any] = []
+
+        if video_id:
+            clauses.append("video_id = ?")
+            params.append(video_id)
+
+        if allowed_batches is not None:
+            clean_batches = sorted({b.strip().upper() for b in allowed_batches if b and b.strip()})
+            if not clean_batches:
+                return "", [], True
+            batch_parts: List[str] = []
+            for batch in clean_batches:
+                escaped = batch.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                batch_parts.append("(video_id LIKE ? ESCAPE '\\' OR UPPER(video_id) = ?)")
+                params.extend([f"{escaped}\\_%", batch])
+            clauses.append(f"({' OR '.join(batch_parts)})")
+
+        if excluded_videos and len(excluded_videos) <= 500:
+            sorted_excluded = sorted(excluded_videos)
+            placeholders = ", ".join(["?"] * len(sorted_excluded))
+            clauses.append(f"video_id NOT IN ({placeholders})")
+            params.extend(sorted_excluded)
+
+        return (" AND ".join(clauses)), params, False
+
     def search_ocr(
         self,
         query: str,
         video_id: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        allowed_batches: Optional[Set[str]] = None,
+        excluded_videos: Optional[Set[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Executes Two-Stage Hybrid Search across detected on-screen text:
@@ -523,9 +581,17 @@ class MetadataDB:
         if not raw_query:
             return []
 
+        scope_sql, scope_params, is_empty_scope = self._build_ocr_scope_sql(
+            video_id=video_id,
+            allowed_batches=allowed_batches,
+            excluded_videos=excluded_videos,
+        )
+        if is_empty_scope:
+            return []
+
         # Clean query, escape quotes, and fold Vietnamese 'đ' to Latin 'd' for FTS5 matching
         clean_query = raw_query.replace('"', '""').replace('đ', 'd').replace('Đ', 'D')
-        
+
         # Expand query into multi-format lexical tokens (accented, unaccented, alphanumeric sub-tokens)
         expanded_tokens = expand_ocr_terms(raw_query)
         # Keep tokens with len >= 2 or digits to prevent noisy single-character FTS matching
@@ -541,13 +607,12 @@ class MetadataDB:
 
         where_clause = "WHERE ocr_fts MATCH ?"
         params: List[Any] = [fts_query]
+        if scope_sql:
+            where_clause += f" AND {scope_sql}"
+            params.extend(scope_params)
 
-        if video_id:
-            where_clause += " AND video_id = ?"
-            params.append(video_id)
-
-        # Retrieve a deep candidate pool (up to 10x limit, min 500) for fuzzy reranking
-        pool_limit = max(limit * 10, 500)
+        # Retrieve a bounded candidate pool for fuzzy reranking without triggering 10k+ row scans
+        pool_limit = max(limit, min(max(limit * 4, 500), 2500))
         params.append(pool_limit)
 
         sql = f"""
@@ -574,15 +639,16 @@ class MetadataDB:
                 cursor = conn.execute(sql, tuple(params))
                 rows = [dict(r) for r in cursor.fetchall()]
 
-        # Substring LIKE fallback: if FTS returned few results or missed compound/hyphenated tokens
-        if len(rows) < pool_limit:
-            seen_kf_ids = {r["keyframe_id"] for r in rows if r.get("keyframe_id")}
-            like_candidates_to_try = [raw_query.strip()]
-            for t in terms:
-                if len(t) >= 3 and t not in like_candidates_to_try:
-                    like_candidates_to_try.append(t)
+            # Substring LIKE fallback only when FTS returns sparse hits (e.g. hyphenated plates/codes)
+            like_threshold = min(limit, 50)
+            if len(rows) < like_threshold:
+                seen_kf_ids = {r["keyframe_id"] for r in rows if r.get("keyframe_id")}
+                like_candidates_to_try = [raw_query.strip()]
+                for t in terms:
+                    if len(t) >= 3 and t not in like_candidates_to_try:
+                        like_candidates_to_try.append(t)
 
-            with self._get_connection() as conn:
+                like_scope_clause = f"AND {scope_sql}" if scope_sql else ""
                 for term in like_candidates_to_try[:4]:
                     remaining = pool_limit - len(rows)
                     if remaining <= 0:
@@ -591,12 +657,12 @@ class MetadataDB:
                         SELECT ocr_id, video_id, keyframe_id, timestamp_sec, text_detected, 1.5 AS bm25_score
                         FROM ocr_records
                         WHERE text_detected LIKE ?
-                        {("AND video_id = ?" if video_id else "")}
+                        {like_scope_clause}
                         LIMIT ?;
                     """
-                    like_params = [f"%{term}%"]
-                    if video_id:
-                        like_params.append(video_id)
+                    like_params: List[Any] = [f"%{term}%"]
+                    if scope_params:
+                        like_params.extend(scope_params)
                     like_params.append(min(100, remaining))
 
                     try:
@@ -612,29 +678,63 @@ class MetadataDB:
         if not rows:
             return []
 
-        # Stage 2: Fine-Grained Token-Level Fuzzy Rescoring
+        # Stage 2: Fine-Grained Token-Level Fuzzy Rescoring (exact-match short-circuit + pair memoization)
         folded_query = fold_vietnamese(raw_query)
-        # Extract word and sub-token boundaries for robust alignment
-        query_words = [w for w in re.findall(r"[a-z0-9]+", folded_query) if w]
+        query_words = _WORD_TOKEN_RE.findall(folded_query)
         spaceless_query = "".join(query_words)
+
+        unique_qw = list(dict.fromkeys(query_words))
+        # Pre-index seq2 once per query word so Difflib avoids rebuilding b2j dicts inside the row loop
+        sm_by_qw = {qw: SequenceMatcher(None, "", qw) for qw in unique_qw}
+        len_by_qw = {qw: len(qw) for qw in unique_qw}
+        pair_sim_cache: Dict[Tuple[str, str], float] = {}
 
         max_bm25 = max((r.get("bm25_score", 1.0) for r in rows), default=1.0)
         if max_bm25 <= 0.0:
             max_bm25 = 1.0
 
+        lq_full = len(folded_query)
+        n_qwords = len(query_words)
+        check_phrase_sim = lq_full >= 4
+
         for r in rows:
             text_detected = r.get("text_detected", "")
             folded_text = fold_vietnamese(text_detected)
-            cand_words = [w for w in re.findall(r"[a-z0-9]+", folded_text) if w]
+            cand_words = _WORD_TOKEN_RE.findall(folded_text)
             spaceless_text = "".join(cand_words)
 
-            # Word-level alignment similarity: for each query word, find best matching word in candidate text
-            if query_words and cand_words:
-                word_sims = []
+            # Word-level alignment similarity with O(1) exact check & upper-bound pruning
+            if n_qwords and cand_words:
+                cand_word_set = set(cand_words)
+                total_w_sim = 0.0
                 for qw in query_words:
-                    best_w_sim = max((SequenceMatcher(None, qw, cw).ratio() for cw in cand_words), default=0.0)
-                    word_sims.append(best_w_sim)
-                word_score = sum(word_sims) / len(word_sims)
+                    if qw in cand_word_set:
+                        total_w_sim += 1.0
+                        continue
+                    best_w_sim = 0.0
+                    lq = len_by_qw[qw]
+                    sm = sm_by_qw[qw]
+                    for cw in cand_word_set:
+                        pair_key = (qw, cw)
+                        cached_sim = pair_sim_cache.get(pair_key)
+                        if cached_sim is not None:
+                            if cached_sim > best_w_sim:
+                                best_w_sim = cached_sim
+                            continue
+                        lc = len(cw)
+                        # Mathematical upper bound of SequenceMatcher.ratio() skips hopeless pairs
+                        min_len = lq if lq < lc else lc
+                        if (2.0 * min_len / (lq + lc)) <= best_w_sim:
+                            continue
+                        sm.set_seq1(cw)
+                        if sm.quick_ratio() <= best_w_sim:
+                            continue
+                        sim = sm.ratio()
+                        pair_sim_cache[pair_key] = sim
+                        if sim > best_w_sim:
+                            best_w_sim = sim
+                    total_w_sim += best_w_sim
+                word_score = total_w_sim / n_qwords
             else:
                 word_score = 0.0
 
@@ -644,8 +744,11 @@ class MetadataDB:
                 sub_bonus = 0.35
             elif len(spaceless_query) >= 3 and spaceless_query in spaceless_text:
                 sub_bonus = 0.30
-            elif len(folded_query) >= 4 and SequenceMatcher(None, folded_query, folded_text).ratio() >= 0.75:
-                sub_bonus = 0.20
+            elif check_phrase_sim:
+                lt_full = len(folded_text)
+                if lt_full > 0 and (2.0 * min(lq_full, lt_full) / (lq_full + lt_full)) >= 0.75:
+                    if SequenceMatcher(None, folded_query, folded_text).ratio() >= 0.75:
+                        sub_bonus = 0.20
 
             fuzzy_score = min(word_score + sub_bonus, 1.0)
             norm_bm25 = r.get("bm25_score", 0.0) / max_bm25
