@@ -157,3 +157,6 @@ The server automatically loads environment overrides from [.env](file:///d:/UIT/
   * Every submitted interval `(evaluation_id, video_id, start_ms, end_ms)` is cached in-memory. Resubmitting the exact same range within the same round is automatically intercepted with `DUPLICATE_PREVENTED` to prevent penalty score deductions.
 * **Resetting for a New Round:**
   * Click `[DRES Config]` in the header and select `[Clear Round Cache]` to reset the duplicate cache and submission history when a new competition query begins.
+* **Visual-First OCR (`Boost` vs `Filter`) & Sequential `+ Scene` Search (Task 07A):**
+  * Use the inline **OCR text** field next to the main query bar to keep on-screen text untranslated in Vietnamese while `Auto VI➜EN` translates only visual cues. Choose **`Boost`** when text is uncertain (visual ranking stays primary with a quality-gated bonus) or **`Filter`** when an exact plate/title must appear in the video.
+  * Click **`+ Scene`** to open **Scene 2**, pick which scene is the **Anchor** (rarest/clearest scene), and set the chronological **Gap** (`1-15s`, `1-30s`, `1-60s`, `2-120s`) to run Two-Phase Anchor-then-Scan linking.

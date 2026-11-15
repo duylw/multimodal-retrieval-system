@@ -3,15 +3,15 @@
 > **Project:** Natural Language Multimodal Video Moment Retrieval System  
 > **Institution:** University of Information Technology (UIT)  
 > **Target Environment:** NVIDIA GeForce GTX 1650 (4GB VRAM), 16GB RAM, ~150GB Free Disk (D:).  
-> **Last Updated:** October 26, 2026
+> **Last Updated:** November 15, 2026
 
 ---
 
 ## 1. Overall Status
 
-* **Current Stage:** **Milestone 4 Extension: Dedicated KIS Competition Workstation & Ergonomic Accelerators**
-* **Overall Progress:** `100%`
-* **Current Focus:** Completed Task 06D (Automated Query Translation & Ergonomic Competition Accelerators); Milestone 4 Extension fully delivered and verified.
+* **Current Stage:** **Milestone 5: Competition Retrieval & Cockpit Optimization (`Task 07A` - `Task 07D`)**
+* **Overall Progress:** `Milestone 0-4 Extension Completed; Milestone 5 In Progress (1/4 Tasks Completed)`
+* **Current Focus:** Completed [Task 07A](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md) (Visual-First OCR Boost/Filter & Anchor-then-Scan Sequential Retrieval); next step is [Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md).
 
 ---
 
@@ -30,7 +30,11 @@
 | **Task 06** | Web Interface & Relevance Feedback | Explainable pipeline trace, per-cue hits breakdown, multi-cue builder, HTTP 206 video seeking, Rocchio feedback | **Completed** | [task-06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md) | `search_engine.py`, `debug_server.py`, `src/ui/static/`, `multimodal-search-ui-guide.md` |
 | **Task 06B** | KIS Scrubber & DRES Live Submission | 1-click playhead submit (`+-0.5s`), Filmstrip (`+-15s`), `-v:` negative cues, story boost, DRES submit | **Completed** | [task-06b](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md) | `debug_server.py`, `app.js`, `index.html`, `style.css`, `kis-interactive-submission-guide.md` |
 | **Task 06C** | KIS Competition Workstation & Modal Inspector | Standalone competition UI, Left KIS submission drawer, Right high-density frame grid, Pop-up video modal | **Completed** | [task-06c](file:///d:/UIT/TX/doan/tasks/task-06c-competition-workstation-ui.md) | `competition_server.py`, `src/ui/competition/` assets |
-| **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Completed** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | `competition_server.py`, `src/ui/competition/`, `competition-workstation-guide.md` |
+| **Task 06D** | Query Auto-Translation & Competition Ergonomics | Google Translate API middleware (VI -> EN), selective OCR preservation, history chips, single-hand hotkeys | **Completed** | [task-06d](file:///d:/UIT/TX/doan/tasks/task-06d-live-translation-and-ergonomics.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) |
+| **Task 07A** | Visual-First OCR Fusion & Anchor-then-Scan Sequence | Preserved standalone OCR; quality-gated OCR Boost/Filter, disabled heuristic hijack, 2-phase FAISS reconstruct sequential linking | **Completed** | [task-07a](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md) | [metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py), [query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py), [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
+| **Task 07B** | Keyframe Similarity Search & Active Filtering | 0ms FAISS `reconstruct` image similarity, `-v:` exclude bar, session video blacklist, batch scope picker | **Pending** | [task-07b](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md) | [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
+| **Task 07C** | Video Grouping View & Dual-Frame Sequence Cards | Chronological `By Video` horizontal strips, paired `Stage 1 -> (+Δt) -> Stage 2` cards | **Pending** | [task-07c](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
+| **Task 07D** | Zero-Popup Cockpit Layout & Timeline Hit Markers | Compact header stopwatch, persistent right-hand Verification & Submit Dock, inline `+-10s` strip, scrubber hit ticks | **Pending** | [task-07d](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md) | [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) |
 
 ---
 
@@ -60,6 +64,11 @@
   * [x] Multimodal Search UI with Explainable Pipeline Inspector, Multi-Cue Builder, and Rocchio feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
   * [x] KIS Interactive Scrubber, 1-Click Playhead Submit (`+-0.5s`), Temporal Filmstrip (`+-15s`), Negative Visual Cues (`-v:`), and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
   * [x] Clean packaged codebase and thesis demonstration materials.
+* [ ] **Milestone 5: Competition Retrieval & Cockpit Optimization** (In Progress Nov 15, 2026)
+  * [x] Visual-First OCR (`Boost` / `Filter`) & Two-Phase Anchor-then-Scan Sequential Linking ([Task 07A](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md)).
+  * [ ] Instant Keyframe Similarity (`0ms` FAISS reconstruct), Exclude (`-v`), Video Blacklist, & Batch Scope Filter ([Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md)).
+  * [ ] Video Grouping Strips (`By Video`) & Dual-Frame Sequential Result Cards ([Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md)).
+  * [ ] Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer ([Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md)).
 
 ---
 
@@ -202,12 +211,21 @@
       * Created Session Query History & Iteration Chips (`#queryAcceleratorsBar`) storing the 15 most recent unique queries in `localStorage` (`kis_competition_query_history`) with 1-click execution chips and `[Clear]` button.
       * Verified full single-hand competition ergonomics (`/`, `Enter`, `Esc`, `Space`, `J`/`L`, `Left`/`Right`, `I`, `O`, `S`).
       * Authored practical usage documentation in [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) and verified endpoints in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
+  * **Nov 15, 2026:**
+    * Added optional `mediaItemCollectionName` support across [src/common/types.py](file:///d:/UIT/TX/doan/src/common/types.py), [src/submission/dres_client.py](file:///d:/UIT/TX/doan/src/submission/dres_client.py), [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), and [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) DRES Config drawer to support multi-collection DRES evaluations; verified with `test_dres_collection_name_payload` in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
+    * Rebuilt [data/indices/visual_siglip2.index](file:///d:/UIT/TX/doan/data/indices/visual_siglip2.index) via [src/indexers/build_indices.py](file:///d:/UIT/TX/doan/src/indexers/build_indices.py) across all 726 `.npz` caches in [data/features/visual/](file:///d:/UIT/TX/doan/data/features/visual), expanding searchable FAISS coverage from 109,798 vectors (`L13`-`L24`) to all **243,732 vectors** (`L01`-`L24`).
+    * Diagnosed retrieval & UX bottlenecks on live competition runs and broke down Milestone 5 enhancements into four atomic specifications: [Task 07A](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md), [Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md), [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md), and [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md).
+    * Implemented and verified **[Task 07A: Visual-First OCR Fusion & Anchor-then-Scan Sequential Retrieval](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md)**:
+      * Preserved standalone `MetadataDB.search_ocr()` intact while polishing `LIKE` fallback deduplication (`keyframe_id`) and punctuation-stripped `spaceless` matching in [src/indexers/metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py).
+      * Removed noisy generic `OCR_TRIGGER_KEYWORDS` auto-extraction in [src/retrieval/query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py) and added structured `scenes`, `ocr_mode` (`off`/`boost`/`filter`), `anchor_stage`, and `[min_gap_sec, max_gap_sec]` parsing.
+      * Implemented Visual-First OCR (`Boost` with `score >= 0.35` quality gate vs `Filter` subset FAISS scoring) and Two-Phase Anchor-then-Scan Sequential Linking in [src/retrieval/search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py).
+      * Exposed inline OCR box (`Boost`/`Filter`/`Off`), `+ Scene` sequence builder, and sequential stage pills in [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py) and [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition); verified via [tests/test_retrieval.py](file:///d:/UIT/TX/doan/tests/test_retrieval.py) and [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
 
 ---
 
 ## 5. Next Action
-* **Milestone 4 Extension Complete:**
-  * Both Task 06C and Task 06D are 100% completed and verified.
-  * System is primed for live VBS / AI Challenge competition runs or UIT graduation thesis defense demonstrations.
-  * Launch server at: `uv run --extra gpu python -m src.ui.competition_server --port 8001`.
+* **Implement Milestone 5 sequentially starting with [Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md):**
+  1. [Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md): Instant Keyframe Similarity (`0ms` FAISS reconstruct), Exclude (`-v`), Video Blacklist, & Batch Scope Picker.
+  2. [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md): Video Grouping Strip View (`By Video`) & Dual-Frame Sequence Cards.
+  3. [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md): Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer.
 

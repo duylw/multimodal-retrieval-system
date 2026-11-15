@@ -121,6 +121,7 @@ d:/UIT/TX/doan/
 │       ├── kis-interactive-submission-guide.md
 │       ├── kis-ui-user-and-strategy-guide.md
 │       ├── submission-protocol-guide.md
+│       ├── competition-workstation-guide.md
 │       └── debug-ui-guide.md
 │
 ├── tasks/                     # Task specifications and implementation roadmaps
@@ -133,7 +134,13 @@ d:/UIT/TX/doan/
 │   ├── task-04-ocr-easyocr.md
 │   ├── task-05-temporal-fusion.md
 │   ├── task-06-ui-and-feedback.md
-│   └── task-06b-kis-interactive-submission.md
+│   ├── task-06b-kis-interactive-submission.md
+│   ├── task-06c-competition-workstation-ui.md
+│   ├── task-06d-live-translation-and-ergonomics.md
+│   ├── task-07a-visual-first-ocr-and-anchor-sequence.md
+│   ├── task-07b-similarity-search-and-active-filtering.md
+│   ├── task-07c-video-grouping-and-sequence-cards.md
+│   └── task-07d-cockpit-layout-and-timeline-markers.md
 │
 ├── configs/                   # System configuration files
 │   └── default_config.yaml    # Storage paths, shot thresholds, model IDs, batch sizes
