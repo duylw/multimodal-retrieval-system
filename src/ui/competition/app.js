@@ -13,11 +13,15 @@
     // Current query & search
     searchMode: 'auto',
     resultsLimit: 300,
-    dresBatchesOnly: true,
     targetVideoOnly: false,
     activeVideoId: null,
     allCandidates: [],
     activeCandidate: null,
+
+    // Task 07B: Similarity Reference & Active Pruning Filters
+    referenceKeyframe: null, // { keyframe_id, video_id, timestamp_sec }
+    allowedBatches: null,    // initialized in loadAllowedBatches()
+    excludedVideos: new Set(),
 
     // Target coordinates
     targetStartSec: 0.0,
@@ -49,12 +53,14 @@
       history: []
     },
 
-    // Task 06D & 07A: Query Translation State
+    // Task 06D & 07A/07B: Query Translation State
     lastTranslation: {
       original: '',
       translated: '',
       originalScene2: '',
-      translatedScene2: ''
+      translatedScene2: '',
+      originalNegative: '',
+      translatedNegative: ''
     }
   };
 
@@ -65,6 +71,8 @@
     'L13', 'L14', 'L15', 'L16', 'L17', 'L18',
     'L19', 'L20', 'L21', 'L22', 'L23', 'L24'
   ]);
+  const ALL_BATCH_LIST = Array.from(DRES_OFFICIAL_BATCHES);
+  const ALLOWED_BATCHES_STORAGE_KEY = 'kis_allowed_batches';
 
   // =========================================================================
   // DOM Elements Cache
@@ -72,8 +80,12 @@
   const dom = {
     // Top Bar
     queryInput: document.getElementById('queryInput'),
+    refKeyframePill: document.getElementById('refKeyframePill'),
+    refKeyframeLabel: document.getElementById('refKeyframeLabel'),
+    clearRefKeyframeBtn: document.getElementById('clearRefKeyframeBtn'),
     ocrQueryInput: document.getElementById('ocrQueryInput'),
     ocrRoleSelect: document.getElementById('ocrRoleSelect'),
+    negativeQueryInput: document.getElementById('negativeQueryInput'),
     toggleSequenceBtn: document.getElementById('toggleSequenceBtn'),
     sequenceBuilderRow: document.getElementById('sequenceBuilderRow'),
     scene2Input: document.getElementById('scene2Input'),
@@ -85,10 +97,21 @@
     searchBtn: document.getElementById('searchBtn'),
     searchModePills: document.querySelectorAll('.mode-pill'),
     autoTranslateCheck: document.getElementById('autoTranslateCheck'),
-    dresBatchesOnly: document.getElementById('dresBatchesOnly'),
+    batchScopeWrapper: document.getElementById('batchScopeWrapper'),
+    batchScopeBtn: document.getElementById('batchScopeBtn'),
+    batchScopeLabel: document.getElementById('batchScopeLabel'),
+    batchScopePopover: document.getElementById('batchScopePopover'),
+    batchCheckboxGrid: document.getElementById('batchCheckboxGrid'),
+    applyBatchScopeBtn: document.getElementById('applyBatchScopeBtn'),
     targetVideoOnly: document.getElementById('targetVideoOnly'),
     targetVideoFilterLabel: document.getElementById('targetVideoFilterLabel'),
     resultsLimitSelect: document.getElementById('resultsLimitSelect'),
+    excludedVideosBar: document.getElementById('excludedVideosBar'),
+    excludedVideosCountLabel: document.getElementById('excludedVideosCountLabel'),
+    resetExcludedVideosBtn: document.getElementById('resetExcludedVideosBtn'),
+    simActiveBar: document.getElementById('simActiveBar'),
+    simActiveLabel: document.getElementById('simActiveLabel'),
+    exitSimModeBtn: document.getElementById('exitSimModeBtn'),
     dresConnectionPill: document.getElementById('dresConnectionPill'),
     dresStatusText: document.getElementById('dresStatusText'),
     toggleDresSettingsBtn: document.getElementById('toggleDresSettingsBtn'),
@@ -574,12 +597,14 @@
   async function translateCurrentQuery(force = false) {
     const raw = dom.queryInput.value.trim();
     const rawScene2 = dom.scene2Input ? dom.scene2Input.value.trim() : '';
-    if (!raw && !rawScene2) return raw;
+    const rawNegative = dom.negativeQueryInput ? dom.negativeQueryInput.value.trim() : '';
+    if (!raw && !rawScene2 && !rawNegative) return raw;
 
     // Skip if identical to currently displayed translation unless forced
     const s1Same = !raw || (state.lastTranslation.translated && raw === state.lastTranslation.translated);
     const s2Same = !rawScene2 || (state.lastTranslation.translatedScene2 && rawScene2 === state.lastTranslation.translatedScene2);
-    if (!force && s1Same && s2Same) {
+    const negSame = !rawNegative || (state.lastTranslation.translatedNegative && rawNegative === state.lastTranslation.translatedNegative);
+    if (!force && s1Same && s2Same && negSame) {
       return raw;
     }
 
@@ -589,49 +614,46 @@
     }
 
     try {
-      let translated = raw;
-      if (raw) {
+      const translateText = async (text) => {
+        if (!text) return text;
         const res = await fetch('/api/translate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: raw, source_lang: 'auto', target_lang: 'en' })
+          body: JSON.stringify({ query: text, source_lang: 'auto', target_lang: 'en' })
         });
-        if (res.ok) {
-          const data = await res.json();
-          const t1 = (data.translated_query || '').trim();
-          if (t1) translated = t1;
-        }
-      }
+        if (!res.ok) return text;
+        const data = await res.json();
+        return (data.translated_query || '').trim() || text;
+      };
 
-      let translatedScene2 = rawScene2;
-      if (rawScene2) {
-        const res2 = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: rawScene2, source_lang: 'auto', target_lang: 'en' })
-        });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          const t2 = (data2.translated_query || '').trim();
-          if (t2) translatedScene2 = t2;
-        }
-      }
+      const translated = s1Same ? raw : await translateText(raw);
+      const translatedScene2 = s2Same ? rawScene2 : await translateText(rawScene2);
+      const translatedNegative = negSame ? rawNegative : await translateText(rawNegative);
 
-      const changed = (translated && translated !== raw) || (translatedScene2 && translatedScene2 !== rawScene2);
+      const changed = (
+        (translated && translated !== raw) ||
+        (translatedScene2 && translatedScene2 !== rawScene2) ||
+        (translatedNegative && translatedNegative !== rawNegative)
+      );
       if (changed) {
         state.lastTranslation = {
-          original: raw,
-          translated: translated,
-          originalScene2: rawScene2,
-          translatedScene2: translatedScene2
+          original: raw || state.lastTranslation.original,
+          translated: translated || state.lastTranslation.translated,
+          originalScene2: rawScene2 || state.lastTranslation.originalScene2,
+          translatedScene2: translatedScene2 || state.lastTranslation.translatedScene2,
+          originalNegative: rawNegative || state.lastTranslation.originalNegative,
+          translatedNegative: translatedNegative || state.lastTranslation.translatedNegative
         };
         if (raw) dom.queryInput.value = translated;
         if (rawScene2 && dom.scene2Input) dom.scene2Input.value = translatedScene2;
+        if (rawNegative && dom.negativeQueryInput) dom.negativeQueryInput.value = translatedNegative;
 
         // Display translation diff banner
         if (dom.translationDiffBanner && dom.diffOriginalText && dom.diffTranslatedText) {
-          dom.diffOriginalText.textContent = rawScene2 ? `${raw} >> ${rawScene2}` : raw;
-          dom.diffTranslatedText.textContent = translatedScene2 ? `${translated} >> ${translatedScene2}` : translated;
+          const origParts = [raw, rawScene2 ? `>> ${rawScene2}` : '', rawNegative ? `(-v: ${rawNegative})` : ''].filter(Boolean);
+          const transParts = [translated, translatedScene2 ? `>> ${translatedScene2}` : '', translatedNegative ? `(-v: ${translatedNegative})` : ''].filter(Boolean);
+          dom.diffOriginalText.textContent = origParts.join(' ');
+          dom.diffTranslatedText.textContent = transParts.join(' ');
           dom.translationDiffBanner.classList.remove('hidden');
         }
       }
@@ -648,15 +670,26 @@
   }
 
   function revertTranslation() {
-    if (state.lastTranslation.original || state.lastTranslation.originalScene2) {
-      dom.queryInput.value = state.lastTranslation.original || '';
-      if (dom.scene2Input && state.lastTranslation.originalScene2 !== undefined) {
-        dom.scene2Input.value = state.lastTranslation.originalScene2 || '';
+    const lt = state.lastTranslation;
+    if (lt.original || lt.originalScene2 || lt.originalNegative) {
+      if (lt.original !== undefined) dom.queryInput.value = lt.original || '';
+      if (dom.scene2Input && lt.originalScene2 !== undefined) {
+        dom.scene2Input.value = lt.originalScene2 || '';
+      }
+      if (dom.negativeQueryInput && lt.originalNegative !== undefined) {
+        dom.negativeQueryInput.value = lt.originalNegative || '';
       }
       if (dom.translationDiffBanner) {
         dom.translationDiffBanner.classList.add('hidden');
       }
-      state.lastTranslation = { original: '', translated: '', originalScene2: '', translatedScene2: '' };
+      state.lastTranslation = {
+        original: '',
+        translated: '',
+        originalScene2: '',
+        translatedScene2: '',
+        originalNegative: '',
+        translatedNegative: ''
+      };
       executeSearch(true); // skipAutoTranslate = true to prevent re-translation loop
     }
   }
@@ -724,6 +757,7 @@
       chip.textContent = item.length > 45 ? `${item.slice(0, 42)}...` : item;
 
       chip.addEventListener('click', () => {
+        clearReferenceKeyframe();
         dom.queryInput.value = item;
         document.querySelectorAll('.history-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
@@ -740,6 +774,177 @@
   }
 
   // =========================================================================
+  // Task 07B: Similarity Reference, Active Batch Scope & Video Exclusion
+  // =========================================================================
+
+  function loadAllowedBatches() {
+    try {
+      const saved = localStorage.getItem(ALLOWED_BATCHES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          state.allowedBatches = new Set(parsed.filter(b => DRES_OFFICIAL_BATCHES.has(b)));
+          renderBatchScopeUI();
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[BATCH SCOPE] Failed to load saved batches:', err);
+    }
+    state.allowedBatches = new Set(ALL_BATCH_LIST);
+    renderBatchScopeUI();
+  }
+
+  function saveAllowedBatches() {
+    try {
+      localStorage.setItem(ALLOWED_BATCHES_STORAGE_KEY, JSON.stringify(Array.from(state.allowedBatches)));
+    } catch (err) {
+      console.warn('[BATCH SCOPE] Failed to persist batches:', err);
+    }
+  }
+
+  function formatBatchScopeSummary() {
+    const count = state.allowedBatches ? state.allowedBatches.size : 0;
+    if (count === ALL_BATCH_LIST.length) return `All (${count})`;
+    if (count === 0) return 'None (0)';
+    const sorted = ALL_BATCH_LIST.filter(b => state.allowedBatches.has(b));
+    if (count === 12 && sorted[0] === 'L01' && sorted[11] === 'L12') return 'L01-L12 (12)';
+    if (count === 12 && sorted[0] === 'L13' && sorted[11] === 'L24') return 'L13-L24 (12)';
+    if (count <= 2) return sorted.join(', ');
+    return `${sorted.slice(0, 2).join(',')} (+${count - 2})`;
+  }
+
+  function renderBatchScopeUI() {
+    if (!state.allowedBatches) state.allowedBatches = new Set(ALL_BATCH_LIST);
+    if (dom.batchScopeLabel) {
+      dom.batchScopeLabel.textContent = formatBatchScopeSummary();
+    }
+    if (dom.batchScopeBtn) {
+      dom.batchScopeBtn.classList.toggle('filtered', state.allowedBatches.size < ALL_BATCH_LIST.length);
+    }
+    if (!dom.batchCheckboxGrid) return;
+
+    dom.batchCheckboxGrid.innerHTML = '';
+    ALL_BATCH_LIST.forEach(batchId => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isSelected = state.allowedBatches.has(batchId);
+      btn.className = `batch-chip-toggle ${isSelected ? 'selected' : ''}`;
+      btn.textContent = batchId;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.allowedBatches.has(batchId)) {
+          state.allowedBatches.delete(batchId);
+        } else {
+          state.allowedBatches.add(batchId);
+        }
+        saveAllowedBatches();
+        renderBatchScopeUI();
+      });
+      dom.batchCheckboxGrid.appendChild(btn);
+    });
+  }
+
+  function getAllowedBatchesPayload() {
+    if (!state.allowedBatches || state.allowedBatches.size === ALL_BATCH_LIST.length) {
+      return null;
+    }
+    return Array.from(state.allowedBatches);
+  }
+
+  function updateExcludedVideosUI() {
+    if (!dom.excludedVideosBar || !dom.excludedVideosCountLabel) return;
+    const count = state.excludedVideos.size;
+    if (count === 0) {
+      dom.excludedVideosBar.classList.add('hidden');
+      return;
+    }
+    dom.excludedVideosCountLabel.textContent = `Hidden: ${count} video${count > 1 ? 's' : ''}`;
+    dom.excludedVideosBar.classList.remove('hidden');
+  }
+
+  function hideVideoFromResults(videoId) {
+    if (!videoId) return;
+    state.excludedVideos.add(videoId);
+    if (state.activeVideoId === videoId) {
+      state.activeVideoId = null;
+      if (dom.targetVideoOnly) dom.targetVideoOnly.checked = false;
+      if (dom.targetVideoFilterLabel) dom.targetVideoFilterLabel.textContent = 'This Video';
+    }
+    updateExcludedVideosUI();
+    renderCandidateGrid();
+  }
+
+  function resetExcludedVideos() {
+    state.excludedVideos.clear();
+    updateExcludedVideosUI();
+    renderCandidateGrid();
+  }
+
+  const DEFAULT_QUERY_PLACEHOLDER = 'Visual query (VI/EN) or steering prompt when Ref active...';
+
+  function setReferenceKeyframe(targetObj) {
+    if (!targetObj || !targetObj.keyframe_id) return;
+    const ts = targetObj.timestamp_sec !== undefined ? Number(targetObj.timestamp_sec) : Number(targetObj.start_sec || 0);
+    state.referenceKeyframe = {
+      keyframe_id: targetObj.keyframe_id,
+      video_id: targetObj.video_id || '',
+      timestamp_sec: ts
+    };
+    const labelText = `${state.referenceKeyframe.video_id} @ ${formatTime(ts)}`;
+    if (dom.refKeyframePill && dom.refKeyframeLabel) {
+      dom.refKeyframeLabel.textContent = `Ref: ${labelText}`;
+      dom.refKeyframePill.classList.remove('hidden');
+    }
+    if (dom.simActiveBar && dom.simActiveLabel) {
+      dom.simActiveLabel.textContent = `Sim Anchor: ${labelText}`;
+      dom.simActiveBar.classList.remove('hidden');
+    }
+    if (dom.queryInput) {
+      dom.queryInput.placeholder = 'Optional steering text for Sim (e.g. night, red car) — click Exit Sim to leave';
+    }
+    if (state.isVideoModalOpen && state.layoutMode === 'popup') {
+      closeVideoModal();
+    }
+    executeSearch();
+  }
+
+  function clearReferenceKeyframe(rerunIfQueryPresent = false) {
+    const hadRef = Boolean(state.referenceKeyframe);
+    state.referenceKeyframe = null;
+    if (dom.refKeyframePill) {
+      dom.refKeyframePill.classList.add('hidden');
+    }
+    if (dom.simActiveBar) {
+      dom.simActiveBar.classList.add('hidden');
+    }
+    if (dom.queryInput) {
+      dom.queryInput.placeholder = DEFAULT_QUERY_PLACEHOLDER;
+    }
+    document.querySelectorAll('.btn-sim-card.active').forEach(btn => {
+      btn.classList.remove('active');
+      btn.title = 'Find visually similar frames (0ms)';
+    });
+
+    if (!hadRef || !rerunIfQueryPresent) return;
+
+    const hasText = Boolean(dom.queryInput && dom.queryInput.value.trim());
+    const hasOcr = Boolean(dom.ocrQueryInput && dom.ocrQueryInput.value.trim());
+    const hasScene2 = Boolean(dom.scene2Input && dom.scene2Input.value.trim());
+    if (hasText || hasOcr || hasScene2) {
+      executeSearch();
+    } else if (dom.candidateQueryEcho) {
+      dom.candidateQueryEcho.textContent = 'Sim exited — ready for query';
+    }
+  }
+
+  function parseNegativeQueries() {
+    const raw = dom.negativeQueryInput ? dom.negativeQueryInput.value.trim() : '';
+    if (!raw) return [];
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  // =========================================================================
   // Multimodal Search & High-Density Candidate Grid
   // =========================================================================
 
@@ -748,18 +953,24 @@
     const ocrText = dom.ocrQueryInput ? dom.ocrQueryInput.value.trim() : '';
     const ocrMode = dom.ocrRoleSelect ? dom.ocrRoleSelect.value : 'boost';
     let scene2Text = dom.scene2Input ? dom.scene2Input.value.trim() : '';
+    const refKf = state.referenceKeyframe;
 
-    if (!query && !ocrText && !scene2Text) {
+    if (!query && !ocrText && !scene2Text && !refKf) {
       dom.queryInput.focus();
       return;
     }
 
-    // Auto-translate visual descriptions (OCR input stays intact)
-    if (!skipAutoTranslate && dom.autoTranslateCheck && dom.autoTranslateCheck.checked && (query || scene2Text)) {
+    // Auto-translate visual descriptions & negative cues (OCR input stays intact)
+    const rawNeg = dom.negativeQueryInput ? dom.negativeQueryInput.value.trim() : '';
+    if (!skipAutoTranslate && dom.autoTranslateCheck && dom.autoTranslateCheck.checked && (query || scene2Text || rawNeg)) {
       await translateCurrentQuery(false);
       query = dom.queryInput.value.trim();
       scene2Text = dom.scene2Input ? dom.scene2Input.value.trim() : '';
     }
+
+    const negList = parseNegativeQueries();
+    const allowedBatchesPayload = getAllowedBatchesPayload();
+    const excludedVideosPayload = state.excludedVideos.size > 0 ? Array.from(state.excludedVideos) : null;
 
     const gapStr = dom.sequenceGapSelect ? dom.sequenceGapSelect.value : '1-30';
     const [minGapStr, maxGapStr] = gapStr.split('-');
@@ -767,56 +978,84 @@
     const maxGapSec = parseFloat(maxGapStr) || 30.0;
     const anchorStage = dom.sequenceAnchorSelect ? (parseInt(dom.sequenceAnchorSelect.value, 10) || 0) : 0;
 
-    // Save query summary to competition history
     const historyDisplay = [
       query,
       scene2Text ? `>> ${scene2Text}` : '',
-      ocrText ? `ocr: ${ocrText}` : ''
+      ocrText ? `ocr: ${ocrText}` : '',
+      negList.length ? `-v: ${negList.join(', ')}` : ''
     ].filter(Boolean).join(' ');
-    saveQueryToHistory(historyDisplay);
+    if (query || scene2Text || ocrText) {
+      saveQueryToHistory(historyDisplay);
+    }
 
     dom.gridLoadingOverlay.classList.remove('hidden');
-    dom.candidateQueryEcho.textContent = `"${historyDisplay}" (${state.searchMode}${ocrText ? ` + ocr:${ocrMode}` : ''})`;
+    dom.candidateQueryEcho.textContent = refKf
+      ? `Sim: ${refKf.video_id} @ ${formatTime(refKf.timestamp_sec)}${query ? ` + "${query}"` : ''}`
+      : `"${historyDisplay}" (${state.searchMode}${ocrText ? ` + ocr:${ocrMode}` : ''})`;
 
     const vidFilter = (dom.targetVideoOnly.checked && state.activeVideoId) ? state.activeVideoId : null;
-    const useStructuredPost = Boolean(ocrText || scene2Text || query.includes('>>'));
 
     try {
       let res;
-      if (useStructuredPost) {
-        const bodyPayload = {
-          mode: state.searchMode,
+      if (refKf) {
+        const simPayload = {
+          keyframe_id: refKf.keyframe_id,
+          steer_text: query || null,
+          steer_alpha: 0.3,
+          negative_visual_queries: negList,
           top_k: state.resultsLimit,
           video_id: vidFilter,
-          ocr_text: ocrText,
-          ocr_mode: ocrMode,
-          anchor_stage: anchorStage,
-          min_gap_sec: minGapSec,
-          max_gap_sec: maxGapSec
+          allowed_batches: allowedBatchesPayload,
+          excluded_videos: excludedVideosPayload
         };
-
-        if (scene2Text) {
-          bodyPayload.scenes = [
-            { visual: query, ocr: ocrText },
-            { visual: scene2Text }
-          ];
-        } else {
-          bodyPayload.query = query;
-        }
-
-        res = await fetch('/api/search/multimodal', {
+        res = await fetch('/api/search/similar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPayload)
+          body: JSON.stringify(simPayload)
         });
       } else {
-        const params = new URLSearchParams({
-          query: query,
-          mode: state.searchMode,
-          top_k: String(state.resultsLimit)
-        });
-        if (vidFilter) params.append('video_id', vidFilter);
-        res = await fetch(`/api/search/multimodal?${params.toString()}`);
+        const useStructuredPost = Boolean(
+          ocrText || scene2Text || negList.length || query.includes('>>') ||
+          allowedBatchesPayload !== null || excludedVideosPayload !== null
+        );
+        if (useStructuredPost) {
+          const bodyPayload = {
+            mode: state.searchMode,
+            top_k: state.resultsLimit,
+            video_id: vidFilter,
+            ocr_text: ocrText,
+            ocr_mode: ocrMode,
+            negative_visual_queries: negList,
+            anchor_stage: anchorStage,
+            min_gap_sec: minGapSec,
+            max_gap_sec: maxGapSec,
+            allowed_batches: allowedBatchesPayload,
+            excluded_videos: excludedVideosPayload
+          };
+
+          if (scene2Text) {
+            bodyPayload.scenes = [
+              { visual: query, ocr: ocrText },
+              { visual: scene2Text }
+            ];
+          } else {
+            bodyPayload.query = query;
+          }
+
+          res = await fetch('/api/search/multimodal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyPayload)
+          });
+        } else {
+          const params = new URLSearchParams({
+            query: query,
+            mode: state.searchMode,
+            top_k: String(state.resultsLimit)
+          });
+          if (vidFilter) params.append('video_id', vidFilter);
+          res = await fetch(`/api/search/multimodal?${params.toString()}`);
+        }
       }
 
       if (!res.ok) {
@@ -837,9 +1076,11 @@
   function renderCandidateGrid() {
     let candidates = state.allCandidates;
 
-    // Filter by DRES official batches if toggled
-    if (dom.dresBatchesOnly.checked) {
-      candidates = candidates.filter(c => isDresOfficialBatch(c.video_id));
+    if (state.excludedVideos.size > 0) {
+      candidates = candidates.filter(c => !state.excludedVideos.has(c.video_id));
+    }
+    if (state.allowedBatches && state.allowedBatches.size < ALL_BATCH_LIST.length) {
+      candidates = candidates.filter(c => state.allowedBatches.has(getVideoBatch(c.video_id)));
     }
 
     dom.candidateTotalCount.textContent = String(candidates.length);
@@ -849,7 +1090,7 @@
         <div class="grid-empty-state">
           <div class="empty-icon">⚠️</div>
           <h3>No Matching Candidates Found</h3>
-          <p>Try broadening your query keywords or unchecking "DRES Batches Only".</p>
+          <p>Try broadening your query keywords, expanding Batch Scope, or resetting hidden videos.</p>
         </div>
       `;
       return;
@@ -907,6 +1148,8 @@
       : '';
 
     const dur = ((candidate.end_sec || 0) - (candidate.start_sec || 0)).toFixed(1);
+    const isLockedThis = Boolean(dom.targetVideoOnly && dom.targetVideoOnly.checked && state.activeVideoId === candidate.video_id);
+    const isSimThis = Boolean(state.referenceKeyframe && state.referenceKeyframe.keyframe_id === candidate.keyframe_id);
 
     card.innerHTML = `
       <div class="card-media-wrapper" title="Click to open video modal inspector">
@@ -939,7 +1182,9 @@
         <div class="card-actions-row">
           <button class="btn-card-aux btn-open-modal" title="Open modal player">Play</button>
           <button class="btn-card-aux btn-view-strip" title="View +-15s filmstrip">Strip</button>
-          <button class="btn-card-aux btn-only-video" title="Search only inside ${candidate.video_id}">Only</button>
+          <button class="btn-card-aux btn-sim-card ${isSimThis ? 'active' : ''}" title="${isSimThis ? 'Click to exit similarity mode' : 'Find visually similar frames (0ms)'}">Sim</button>
+          <button class="btn-card-aux btn-only-video ${isLockedThis ? 'active' : ''}" title="Toggle search lock inside ${candidate.video_id}">Only</button>
+          <button class="btn-card-aux btn-hide-video" title="Hide all results from ${candidate.video_id}">Hide</button>
         </div>
 
         <button class="btn-card-submit-kis" title="1-Click Instant KIS Submit to DRES">
@@ -952,7 +1197,9 @@
     const mediaWrap = card.querySelector('.card-media-wrapper');
     const playBtn = card.querySelector('.btn-open-modal');
     const stripBtn = card.querySelector('.btn-view-strip');
+    const simBtn = card.querySelector('.btn-sim-card');
     const onlyBtn = card.querySelector('.btn-only-video');
+    const hideBtn = card.querySelector('.btn-hide-video');
     const submitBtn = card.querySelector('.btn-card-submit-kis');
 
     const handleOpenPlayer = () => {
@@ -968,12 +1215,35 @@
       openVideoModal(candidate, true);
     });
 
+    if (simBtn) {
+      simBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.referenceKeyframe && state.referenceKeyframe.keyframe_id === candidate.keyframe_id) {
+          clearReferenceKeyframe(true);
+        } else {
+          setReferenceKeyframe(candidate);
+        }
+      });
+    }
+
     onlyBtn.addEventListener('click', () => {
-      state.activeVideoId = candidate.video_id;
-      dom.targetVideoOnly.checked = true;
-      dom.targetVideoFilterLabel.textContent = candidate.video_id;
+      if (dom.targetVideoOnly.checked && state.activeVideoId === candidate.video_id) {
+        dom.targetVideoOnly.checked = false;
+        dom.targetVideoFilterLabel.textContent = 'This Video';
+      } else {
+        state.activeVideoId = candidate.video_id;
+        dom.targetVideoOnly.checked = true;
+        dom.targetVideoFilterLabel.textContent = candidate.video_id;
+      }
       executeSearch();
     });
+
+    if (hideBtn) {
+      hideBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideVideoFromResults(candidate.video_id);
+      });
+    }
 
     submitBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1207,11 +1477,24 @@
 
         card.innerHTML = `
           <img src="${f.image_url}" alt="KF" class="filmstrip-thumb" loading="lazy" />
+          <button type="button" class="btn-filmstrip-similar" title="Find visually similar frames (0ms)">Sim</button>
           <div class="filmstrip-info">
             <span class="filmstrip-time">${formatTime(f.timestamp_sec)}</span>
             <span class="filmstrip-delta">${f.delta_sec >= 0 ? '+' : ''}${f.delta_sec}s</span>
           </div>
         `;
+
+        const simBtn = card.querySelector('.btn-filmstrip-similar');
+        if (simBtn && f.keyframe_id) {
+          simBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setReferenceKeyframe({
+              keyframe_id: f.keyframe_id,
+              video_id: videoId,
+              timestamp_sec: f.timestamp_sec
+            });
+          });
+        }
 
         card.addEventListener('click', () => {
           dom.modalVideoPlayer.currentTime = f.timestamp_sec;
@@ -1319,16 +1602,45 @@
     dom.clearQueryBtn.addEventListener('click', () => {
       dom.queryInput.value = '';
       if (dom.ocrQueryInput) dom.ocrQueryInput.value = '';
+      if (dom.negativeQueryInput) dom.negativeQueryInput.value = '';
       if (dom.scene2Input) dom.scene2Input.value = '';
+      clearReferenceKeyframe();
       dom.queryInput.focus();
     });
+
+    if (dom.clearRefKeyframeBtn) {
+      dom.clearRefKeyframeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearReferenceKeyframe(true);
+      });
+    }
+
+    if (dom.exitSimModeBtn) {
+      dom.exitSimModeBtn.addEventListener('click', () => {
+        clearReferenceKeyframe(true);
+      });
+    }
+
+    if (dom.queryInput) {
+      dom.queryInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && dom.queryInput.value === '' && state.referenceKeyframe) {
+          e.preventDefault();
+          clearReferenceKeyframe(false);
+        }
+      });
+    }
 
     // Task 07A: Sequence Builder Toggle & Enter key support
     if (dom.toggleSequenceBtn && dom.sequenceBuilderRow) {
       dom.toggleSequenceBtn.addEventListener('click', () => {
         const isHidden = dom.sequenceBuilderRow.classList.toggle('hidden');
         dom.toggleSequenceBtn.classList.toggle('active', !isHidden);
-        if (!isHidden && dom.scene2Input) dom.scene2Input.focus();
+        if (!isHidden) {
+          if (state.referenceKeyframe) {
+            clearReferenceKeyframe(false);
+          }
+          if (dom.scene2Input) dom.scene2Input.focus();
+        }
       });
     }
     if (dom.closeSequenceBtn && dom.sequenceBuilderRow) {
@@ -1340,6 +1652,14 @@
     }
     if (dom.ocrQueryInput) {
       dom.ocrQueryInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeSearch();
+        }
+      });
+    }
+    if (dom.negativeQueryInput) {
+      dom.negativeQueryInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           executeSearch();
@@ -1363,11 +1683,64 @@
         const radio = pill.querySelector('input');
         radio.checked = true;
         state.searchMode = radio.value;
+        if (state.searchMode === 'ocr' && state.referenceKeyframe) {
+          clearReferenceKeyframe(false);
+        }
       });
     });
 
-    // Filters
-    dom.dresBatchesOnly.addEventListener('change', renderCandidateGrid);
+    // Task 07B: Batch Scope Popover & Active Video Exclusion Filters
+    if (dom.batchScopeBtn && dom.batchScopePopover) {
+      dom.batchScopeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dom.batchScopePopover.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (dom.batchScopeWrapper && !dom.batchScopeWrapper.contains(e.target)) {
+          dom.batchScopePopover.classList.add('hidden');
+        }
+      });
+
+      dom.batchScopePopover.querySelectorAll('.btn-batch-preset').forEach(presetBtn => {
+        presetBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const p = presetBtn.dataset.preset;
+          if (p === 'all') state.allowedBatches = new Set(ALL_BATCH_LIST);
+          else if (p === 'b1') state.allowedBatches = new Set(ALL_BATCH_LIST.slice(0, 12));
+          else if (p === 'b2') state.allowedBatches = new Set(ALL_BATCH_LIST.slice(12));
+          else if (p === 'none') state.allowedBatches = new Set();
+          saveAllowedBatches();
+          renderBatchScopeUI();
+          renderCandidateGrid();
+        });
+      });
+    }
+
+    if (dom.applyBatchScopeBtn && dom.batchScopePopover) {
+      dom.applyBatchScopeBtn.addEventListener('click', () => {
+        dom.batchScopePopover.classList.add('hidden');
+        executeSearch();
+      });
+    }
+
+    if (dom.resetExcludedVideosBtn) {
+      dom.resetExcludedVideosBtn.addEventListener('click', resetExcludedVideos);
+    }
+
+    if (dom.targetVideoOnly) {
+      dom.targetVideoOnly.addEventListener('change', () => {
+        if (!dom.targetVideoOnly.checked) {
+          dom.targetVideoFilterLabel.textContent = 'This Video';
+        } else if (state.activeVideoId) {
+          dom.targetVideoFilterLabel.textContent = state.activeVideoId;
+        }
+        if (dom.queryInput.value.trim() || state.referenceKeyframe || (dom.ocrQueryInput && dom.ocrQueryInput.value.trim())) {
+          executeSearch();
+        }
+      });
+    }
+
     dom.resultsLimitSelect.addEventListener('change', (e) => {
       state.resultsLimit = parseInt(e.target.value, 10);
       executeSearch();
@@ -1513,6 +1886,8 @@
 
   async function init() {
     console.log('[KIS Workstation] Initializing application...');
+    loadAllowedBatches();
+    updateExcludedVideosUI();
     initEventListeners();
     renderQueryHistory();
     updateStopwatchDisplay();

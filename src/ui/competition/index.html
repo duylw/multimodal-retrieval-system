@@ -11,49 +11,97 @@
 </head>
 <body class="theme-dark">
 
-  <!-- TOP APP BAR -->
+  <!-- TOP APP BAR (2-ROW ERGONOMIC COCKPIT TOOLBAR) -->
   <header class="app-header">
-    <div class="header-brand">
-      <div class="brand-logo-badge">KIS</div>
-      <div class="brand-text">
-        <h1 class="brand-title">Competition Workstation</h1>
-        <span class="brand-subtitle">UIT Multimodal Video Moment Retrieval</span>
+    <!-- Row 1: Brand + Primary Search Bar + System Actions -->
+    <div class="header-top-row">
+      <div class="header-brand">
+        <div class="brand-logo-badge">KIS</div>
+        <div class="brand-text">
+          <h1 class="brand-title">Competition Workstation</h1>
+          <span class="brand-subtitle">UIT Multimodal Video Moment Retrieval</span>
+        </div>
+      </div>
+
+      <div class="header-primary-search">
+        <div class="search-input-wrapper">
+          <span class="search-icon-badge">Q</span>
+          <div id="refKeyframePill" class="ref-keyframe-pill hidden" title="Visual Similarity Reference (0ms FAISS reconstruct)">
+            <span id="refKeyframeLabel">Ref</span>
+            <button id="clearRefKeyframeBtn" class="btn-ref-clear" type="button" title="Exit similarity mode (remove reference keyframe)">X</button>
+          </div>
+          <input 
+            type="text" 
+            id="queryInput" 
+            class="search-input" 
+            placeholder="Visual query (VI/EN) or steering prompt when Ref active..." 
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button id="translateQueryBtn" class="btn-translate-query" title="Translate Vietnamese visual cues to English (VI ➜ EN)">VI➜EN</button>
+          <button id="clearQueryBtn" class="btn-clear-query" title="Clear query (Esc)">X</button>
+        </div>
+
+        <button id="searchBtn" class="btn-primary-search" title="Execute multimodal search (Enter)">
+          <span class="btn-search-icon">🔍</span>
+          <span class="btn-search-text">Search</span>
+        </button>
+      </div>
+
+      <!-- Right Header Actions -->
+      <div class="header-actions">
+        <div id="dresConnectionPill" class="dres-status-pill dry-run" title="DRES Client Connection Status">
+          <span class="pill-dot"></span>
+          <span id="dresStatusText">DRY-RUN</span>
+        </div>
+
+        <button id="toggleDresSettingsBtn" class="btn-header-secondary" title="Configure DRES server credentials">
+          DRES Config
+        </button>
+
+        <button id="toggleDockedLayoutBtn" class="btn-header-secondary" title="Toggle between floating pop-up player and docked split view">
+          Layout: <span id="layoutModeLabel">Popup</span>
+        </button>
+
+        <button id="unloadVramBtn" class="btn-header-danger" title="Unload SigLIP2 model from GPU memory">
+          Free VRAM
+        </button>
       </div>
     </div>
 
-    <!-- Center Search Bar -->
-    <div class="header-search-container">
-      <div class="search-input-wrapper">
-        <span class="search-icon-badge">Q</span>
-        <input 
-          type="text" 
-          id="queryInput" 
-          class="search-input" 
-          placeholder="Enter query in Vietnamese (e.g. xe buyt mau xanh | ocr: 51B) or multi-cue..." 
-          autocomplete="off"
-          spellcheck="false"
-        >
-        <button id="translateQueryBtn" class="btn-translate-query" title="Translate Vietnamese visual cues to English (VI ➜ EN)">VI➜EN</button>
-        <button id="clearQueryBtn" class="btn-clear-query" title="Clear query (Esc)">X</button>
-      </div>
+    <!-- Row 2: Modifiers (OCR, Exclude, Sequence) & Scope Filters -->
+    <div class="header-sub-row">
+      <div class="subrow-modifiers">
+        <div class="ocr-inline-group" title="Optional On-Screen Text (never translated; kept intact for EasyOCR FTS5)">
+          <input
+            type="text"
+            id="ocrQueryInput"
+            class="ocr-inline-input"
+            placeholder="OCR text (optional)..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <select id="ocrRoleSelect" class="ocr-role-select" title="OCR Hybrid Role: Boost (Visual-primary bonus) or Filter (Must contain OCR text)">
+            <option value="boost" selected>Boost</option>
+            <option value="filter">Filter</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
 
-      <div class="ocr-inline-group" title="Optional On-Screen Text (never translated; kept intact for EasyOCR FTS5)">
-        <input
-          type="text"
-          id="ocrQueryInput"
-          class="ocr-inline-input"
-          placeholder="OCR text (optional)..."
-          autocomplete="off"
-          spellcheck="false"
-        >
-        <select id="ocrRoleSelect" class="ocr-role-select" title="OCR Hybrid Role: Boost (Visual-primary bonus) or Filter (Must contain OCR text)">
-          <option value="boost" selected>Boost</option>
-          <option value="filter">Filter</option>
-          <option value="off">Off</option>
-        </select>
-      </div>
+        <div class="neg-inline-group" title="Exclude visual concepts (-v:, comma-separated, auto-translated)">
+          <span class="neg-badge">-v</span>
+          <input
+            type="text"
+            id="negativeQueryInput"
+            class="neg-inline-input"
+            placeholder="Exclude..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
 
-      <button id="toggleSequenceBtn" class="btn-toggle-sequence" title="Add Scene 2 for Anchor-then-Scan sequential search">+ Scene</button>
+        <button id="toggleSequenceBtn" class="btn-toggle-sequence" title="Add Scene 2 for Anchor-then-Scan sequential search">+ Scene</button>
+      </div>
 
       <div class="search-controls-bar">
         <div class="search-mode-selector">
@@ -67,10 +115,26 @@
             <input type="checkbox" id="autoTranslateCheck" checked>
             <span>Auto VI➜EN</span>
           </label>
-          <label class="filter-checkbox" title="Filter candidate videos to official competition batches (L01-L24)">
-            <input type="checkbox" id="dresBatchesOnly" checked>
-            <span>DRES Batches</span>
-          </label>
+          <div class="batch-scope-wrapper" id="batchScopeWrapper">
+            <button id="batchScopeBtn" type="button" class="btn-batch-scope" title="Select competition batches (L01-L24) to search">
+              Batches: <span id="batchScopeLabel">All (24)</span>
+            </button>
+            <div id="batchScopePopover" class="batch-scope-popover hidden">
+              <div class="batch-popover-header">
+                <span class="batch-popover-title">BATCH SCOPE (L01-L24)</span>
+                <div class="batch-presets-row">
+                  <button type="button" class="btn-batch-preset" data-preset="all">All</button>
+                  <button type="button" class="btn-batch-preset" data-preset="b1">L01-L12</button>
+                  <button type="button" class="btn-batch-preset" data-preset="b2">L13-L24</button>
+                  <button type="button" class="btn-batch-preset" data-preset="none">None</button>
+                </div>
+              </div>
+              <div class="batch-checkbox-grid" id="batchCheckboxGrid"></div>
+              <div class="batch-popover-footer">
+                <button type="button" id="applyBatchScopeBtn" class="btn-batch-apply">Apply & Search</button>
+              </div>
+            </div>
+          </div>
           <label class="filter-checkbox" title="Restrict search exclusively to active video ID">
             <input type="checkbox" id="targetVideoOnly">
             <span id="targetVideoFilterLabel">This Video</span>
@@ -87,32 +151,7 @@
             <option value="1000">1000</option>
           </select>
         </div>
-
-        <button id="searchBtn" class="btn-primary-search" title="Execute multimodal search (Enter)">
-          <span class="btn-search-icon">🔍</span>
-          <span class="btn-search-text">Search</span>
-        </button>
       </div>
-    </div>
-
-    <!-- Right Header Actions -->
-    <div class="header-actions">
-      <div id="dresConnectionPill" class="dres-status-pill dry-run" title="DRES Client Connection Status">
-        <span class="pill-dot"></span>
-        <span id="dresStatusText">DRY-RUN</span>
-      </div>
-
-      <button id="toggleDresSettingsBtn" class="btn-header-secondary" title="Configure DRES server credentials">
-        DRES Config
-      </button>
-
-      <button id="toggleDockedLayoutBtn" class="btn-header-secondary" title="Toggle between floating pop-up player and docked split view">
-        Layout: <span id="layoutModeLabel">Popup</span>
-      </button>
-
-      <button id="unloadVramBtn" class="btn-header-danger" title="Unload SigLIP2 model from GPU memory">
-        Free VRAM
-      </button>
     </div>
   </header>
 
@@ -347,6 +386,16 @@
           <span class="stats-count" id="candidateTotalCount">0</span>
           <span class="stats-divider">|</span>
           <span class="stats-query-echo" id="candidateQueryEcho">Ready for query</span>
+          <span id="excludedVideosBar" class="excluded-videos-bar hidden">
+            <span class="stats-divider">|</span>
+            <span id="excludedVideosCountLabel" class="excluded-count-label">Hidden: 0 videos</span>
+            <button id="resetExcludedVideosBtn" type="button" class="btn-reset-excluded" title="Restore all hidden videos">Reset</button>
+          </span>
+          <span id="simActiveBar" class="sim-active-bar hidden">
+            <span class="stats-divider">|</span>
+            <span id="simActiveLabel" class="sim-active-label">Sim Anchor: none</span>
+            <button id="exitSimModeBtn" type="button" class="btn-exit-sim" title="Exit similarity mode and return to text search">Exit Sim (X)</button>
+          </span>
         </div>
 
         <div class="canvas-view-tools">
