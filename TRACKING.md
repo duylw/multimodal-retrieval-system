@@ -10,8 +10,8 @@
 ## 1. Overall Status
 
 * **Current Stage:** **Milestone 5: Competition Retrieval & Cockpit Optimization (`Task 07A` - `Task 07D`)**
-* **Overall Progress:** `Milestone 0-4 Extension Completed; Milestone 5 In Progress (3/4 Tasks Completed)`
-* **Current Focus:** Completed [Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) (Video Grouping View & Dual-Frame Sequence Cards); next step is [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md).
+* **Overall Progress:** `Milestone 0-5 Completed (100% Architecture & Competition Optimization Complete)`
+* **Current Focus:** Completed [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md) (Zero-Popup Split Cockpit Layout & Timeline Hit Markers); ready for live KIS evaluation and thesis finalization.
 
 ---
 
@@ -34,7 +34,7 @@
 | **Task 07A** | Visual-First OCR Fusion & Anchor-then-Scan Sequence | Preserved standalone OCR; quality-gated OCR Boost/Filter, disabled heuristic hijack, 2-phase FAISS reconstruct sequential linking | **Completed** | [task-07a](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md) | [metadata_db.py](file:///d:/UIT/TX/doan/src/indexers/metadata_db.py), [query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py), [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
 | **Task 07B** | Keyframe Similarity Search & Active Filtering | 0ms FAISS `reconstruct` image similarity, `-v:` exclude bar, session video blacklist, batch scope picker | **Completed** | [task-07b](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md) | [query_parser.py](file:///d:/UIT/TX/doan/src/retrieval/query_parser.py), [search_engine.py](file:///d:/UIT/TX/doan/src/retrieval/search_engine.py), [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition) |
 | **Task 07C** | Video Grouping View & Dual-Frame Sequence Cards | Chronological `By Video` horizontal strips, paired `Stage 1 -> (+Δt) -> Stage 2` cards | **Completed** | [task-07c](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md) | [competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py), [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py) |
-| **Task 07D** | Zero-Popup Cockpit Layout & Timeline Hit Markers | Compact header stopwatch, persistent right-hand Verification & Submit Dock, inline `+-10s` strip, scrubber hit ticks | **Pending** | [task-07d](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md) | [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md) |
+| **Task 07D** | Zero-Popup Cockpit Layout & Timeline Hit Markers | Compact header stopwatch, persistent right-hand Verification & Submit Dock, inline `+-10s` strip, scrubber hit ticks | **Completed** | [task-07d](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md) | [src/ui/competition/](file:///d:/UIT/TX/doan/src/ui/competition), [competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md), [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py) |
 
 ---
 
@@ -64,11 +64,11 @@
   * [x] Multimodal Search UI with Explainable Pipeline Inspector, Multi-Cue Builder, and Rocchio feedback ([Task 06](file:///d:/UIT/TX/doan/tasks/task-06-ui-and-feedback.md)).
   * [x] KIS Interactive Scrubber, 1-Click Playhead Submit (`+-0.5s`), Temporal Filmstrip (`+-15s`), Negative Visual Cues (`-v:`), and live DRES submission console ([Task 06B](file:///d:/UIT/TX/doan/tasks/task-06b-kis-interactive-submission.md)).
   * [x] Clean packaged codebase and thesis demonstration materials.
-* [ ] **Milestone 5: Competition Retrieval & Cockpit Optimization** (In Progress Nov 15, 2026)
+* [x] **Milestone 5: Competition Retrieval & Cockpit Optimization** (Completed Nov 15, 2026)
   * [x] Visual-First OCR (`Boost` / `Filter`) & Two-Phase Anchor-then-Scan Sequential Linking ([Task 07A](file:///d:/UIT/TX/doan/tasks/task-07a-visual-first-ocr-and-anchor-sequence.md)).
   * [x] Instant Keyframe Similarity (`0ms` FAISS reconstruct), Exclude (`-v`), Video Blacklist, & Batch Scope Filter ([Task 07B](file:///d:/UIT/TX/doan/tasks/task-07b-similarity-search-and-active-filtering.md)).
   * [x] Video Grouping Strips (`By Video`) & Dual-Frame Sequential Result Cards ([Task 07C](file:///d:/UIT/TX/doan/tasks/task-07c-video-grouping-and-sequence-cards.md)).
-  * [ ] Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer ([Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md)).
+  * [x] Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer ([Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md)).
 
 ---
 
@@ -231,9 +231,16 @@
       * Upgraded sequential result cards to render side-by-side **Dual-Frame Sequence Previews** (`S1 -> (+Δt) -> S2`) where clicking either pane seeks the player directly to `t1` or `t2` while setting default target range bounds cleanly.
       * Verified with `test_task_07c_video_grouping_and_dual_frame_contracts` in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py).
 
+    * Implemented and verified **[Task 07D: Zero-Popup Split Cockpit Layout & Timeline Hit Markers](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md)**:
+      * Condensed Competition Stopwatch, Wrong Attempt Counter (`+1W`), and Predicted Score Badge into `.header-timer-capsule` with expandable breakdown popover inside `.app-header`, removing left-sidebar width contention.
+      * Re-architected workspace into default Zero-Popup Split Cockpit (`~65%` Scan Canvas on left + `~35%` persistent Right Verification & Submit Dock with live `<video>` stream, fine steppers, inline `+-10s` neighbor filmstrip, target coordinates, `Submit Playhead (S)` / `Submit Range`, and recent DRES stream; optional `[Popup]` fullscreen zoom retained).
+      * Added proportional **Timeline Hit Markers** (`.timeline-hit-marker`) along `.transport-scrubber-wrapper` displaying matched timestamps in the loaded video for 1-click seeking, and extended single-hand hotkeys to operate seamlessly in both Docked Cockpit and Popup Modal modes.
+      * Verified with `test_task_07d_cockpit_layout_and_hit_markers` in [tests/test_competition_workstation.py](file:///d:/UIT/TX/doan/tests/test_competition_workstation.py) and updated [docs/guides/competition-workstation-guide.md](file:///d:/UIT/TX/doan/docs/guides/competition-workstation-guide.md).
+
 ---
 
 ## 5. Next Action
-* **Implement remaining Milestone 5 task:**
-  1. [Task 07D](file:///d:/UIT/TX/doan/tasks/task-07d-cockpit-layout-and-timeline-markers.md): Zero-Popup Split Cockpit Layout, Timeline Hit Markers, & Compact Header Timer.
+* **All Milestone 0-5 development tasks (`Task 00` through `Task 07D`) are completed:**
+  1. Conduct live KIS contest rehearsal runs via `competition_server.py` (port `8001`).
+  2. Prepare final graduation thesis evaluation metrics and defense presentation materials.
 

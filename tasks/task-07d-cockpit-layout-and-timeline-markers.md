@@ -1,6 +1,6 @@
 # Task 07D: Zero-Popup Split Cockpit Layout & Timeline Hit Markers
 
-**Status:** `[PENDING]` Pending
+**Status:** `[DONE]` Completed
 **Target Milestone:** Milestone 5 (Competition Retrieval & Cockpit Optimization)
 **Server Component:** [src/ui/competition_server.py](file:///d:/UIT/TX/doan/src/ui/competition_server.py)
 **Frontend Client:** [src/ui/competition/index.html](file:///d:/UIT/TX/doan/src/ui/competition/index.html), [src/ui/competition/style.css](file:///d:/UIT/TX/doan/src/ui/competition/style.css), [src/ui/competition/app.js](file:///d:/UIT/TX/doan/src/ui/competition/app.js)

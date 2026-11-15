@@ -1,7 +1,7 @@
 # User Guide: Dedicated KIS Competition Workstation UI & Modal Video Inspector
 
 ## 1. Feature Overview
-* **What it does:** The KIS Competition Workstation is a standalone, distraction-free web interface dedicated to live Known-Item Search (KIS) contest performance. It decouples high-speed contest submission workflows from internal debug inspectors, providing a dual-zone ergonomic layout: a persistent Left KIS Command Center Drawer and a Right High-Density Frame Grid with an instant Pop-up Video Modal Player.
+* **What it does:** The KIS Competition Workstation is a standalone, distraction-free web interface dedicated to live Known-Item Search (KIS) contest performance. It decouples high-speed contest submission workflows from internal debug inspectors, providing a Zero-Popup Split Cockpit layout: a Compact Top-Header Timer Capsule, a `~65%` Left Candidate Scan Canvas (`Frames` / `By Video`), and a `~35%` Persistent Right Verification & Submit Dock (with optional Pop-up Modal expansion).
 * **When to use:** Use during live competition rounds (VBS, AI Challenge) or contest rehearsal sessions when submitting target moments directly to the DRES API v2 server under strict time limits (300s for Textual KIS, 240s for Video KIS).
 * **Value provided:** Delivers lightning-fast visual browsing (12-20 candidate frames visible simultaneously), automated query translation (`VI ➜ EN`) with selective OCR preservation, competition session query history chips, 1-click Playhead submission (`+-0.5s`, hotkey `S`), fine-stepper frame scrubbers (`40ms` per frame), live score decay prediction, and duplicate submission suppression in `< 150ms`.
 
@@ -64,39 +64,24 @@ The server automatically loads environment overrides from [.env](file:///d:/UIT/
 ### Workstation Layout Diagram
 
 ```text
-+---------------------------------------------------------------------------------------------------------+
-|                                    KIS COMPETITION WORKSTATION                                          |
-| [Query: "xe buyt mau xanh | ocr: 51B"    ] [VI->EN] [X]  [x] Auto VI->EN  [x] DRES Batches  Limit:[ 100 v] |
-+---------------------------------------------------------------------------------------------------------+
-| [Recent: [v: blue bus | ocr: 51B] [v: woman supermarket] [ocr: HTV9] [Clear] ]                           |
-| [VI->EN: "xe buyt mau xanh | ocr: 51B" -> "v: blue bus | ocr: 51B"                     [Revert] [X] ]   |
-+------------------------------------+--------------------------------------------------------------------+
-| LEFT: KIS COMMAND CENTER (DRAWER)  | RIGHT: HIGH-DENSITY FRAME GRID (TOP-DOWN, LEFT-TO-RIGHT)           |
-|                                    |                                                                    |
-| [LIVE DRES / DRY-RUN] [Config]     | +--------------------+ +--------------------+ +------------------+ |
-| Timer: 03:42 / 05:00  Score: 82.5  | | #1  [THUMB 16:9]   | | #2  [THUMB 16:9]   | | #3 [THUMB 16:9]  | |
-| [Start/Pause] [Reset] [Wrong: 0]   | | L05_V014   00:22.7 | | L13_V016   00:29.8 | | L21_V002 01:14.2 | |
-|                                    | | [Text] "51B-501.62"| | [Text] "51B-318.88"| | [Consensus: 2]   | |
-| Target: L05_V014                   | | [Play] [Filmstrip] | | [Play] [Filmstrip] | | [Play] [Strip]   | |
-| Range: 22000ms - 27000ms (5.0s)    | | [ SUBMIT KIS ]     | | [ SUBMIT KIS ]     | | [ SUBMIT KIS ]   | |
-| Presets: [+-0.5s] [Shot] [+-2.5s]  | +--------------------+ +--------------------+ +------------------+ |
-|                                    | +--------------------+ +--------------------+ +------------------+ |
-| [ SUBMIT TARGET RANGE ]            | | #4  [THUMB 16:9]   | | #5  [THUMB 16:9]   | | #6 [THUMB 16:9]  | |
-| [ QUICK SUBMIT @ PLAYHEAD (S) ]    | | ...                | | ...                | | ...              | |
-|                                    | +--------------------+ +--------------------+ +------------------+ |
-| Real-time Submission Stream:       |                                                                    |
-| - L05_V014 [22-27s] -> [WRONG]     |                                                                    |
-| - L13_V016 [25-32s] -> [CORRECT]   |                                                                    |
-+------------------------------------+--------------------------------------------------------------------+
-| POP-UP MODAL VIDEO INSPECTOR (Triggered on candidate thumbnail click):                                  |
-| +-----------------------------------------------------------------------------------------------------+ |
-| | Video: L05_V014 @ 00:22.72 / 12:45.00                                                         [X]   | |
-| | [                           VIDEO STREAM PLAYER (HTTP 206)                                        ] | |
-| | Controls: [-5s] [-1s] [-1f] [ > Play ] [+1f] [+1s] [+5s]  | Mark In: 22.0s (I)  Mark Out: 23.0s (O) | |
-| | [Play Range]  [ SUBMIT RANGE ]  [ SUBMIT PLAYHEAD (S) ]                                             | |
-| | Context Filmstrip (+-15s): [ -12.4s ] [ -8.1s ] [ -3.2s ] [ CENTER ] [ +4.5s ] [ +9.8s ]             | |
-| +-----------------------------------------------------------------------------------------------------+ |
-+---------------------------------------------------------------------------------------------------------+
++---------------------------------------------------------------------------------------------------+
+| [KIS] | Visual Query [VI->EN][X] | [Search] | [04:12/05:00 Start Reset +1W 100pts] [DRY-RUN] [VRAM]|
+| OCR [Boost|Filter] | [-v Exclude] | [+Scene] | [Hybrid|Visual|OCR] [Batches(24)] [Limit]        |
++---------------------------------------------------------------------------------------------------+
+| [Recent: [v: blue bus | ocr: 51B] [v: woman supermarket] [Clear] ]                                 |
++---------------------------------------------------+-----------------------------------------------+
+| CANDIDATES (300)        [View: Frames | By Video] | INSPECTOR: L18_V004 @ 01:24.5 [Popup] [Hide]  |
+| +--------+ +--------+ +--------+ +--------+       | +-------------------------------------------+ |
+| | #1     | | #2     | | #3     | | #4     |       | |         HTML5 Video Player (HTTP 206)     | |
+| | L18_V4 | | L05_V2 | | L21_V9 | | L12_V1 |       | +-------------------------------------------+ |
+| | [Sim]  | | [Sim]  | | [Sim]  | | [Sim]  |       | ====|======|============|================     |
+| +--------+ +--------+ +--------+ +--------+       |     ^ Amber Timeline Hit Markers (1-click seek) |
+| +--------+ +--------+ +--------+ +--------+       | [-5s][-1s][-1f][Play][+1f][+1s][+5s] [I] [O]  |
+| | #5     | | #6     | | #7     | | #8     |       | Neighbor Filmstrip (+-10s): [ ][ ][*][ ][ ]   |
+| | ...    | | ...    | | ...    | | ...    |       | Target: L18_V004 [84.00 - 85.00] [Tight][Shot]|
+| +--------+ +--------+ +--------+ +--------+       | [ SUBMIT PLAYHEAD (S) ]  [ SUBMIT RANGE ]     |
+|                                                   | Recent Submissions (Stream)                   |
++---------------------------------------------------+-----------------------------------------------+
 ```
 
 ### Automated Query Translation & Selective Cue Protection
@@ -169,3 +154,7 @@ The server automatically loads environment overrides from [.env](file:///d:/UIT/
 * **Video Grouping Strips (`By Video`) & Dual-Frame Sequential Cards (Task 07C):**
   * Toggle **`[Frames | By Video]`** in the canvas header to switch instantaneously (client-side `< 30ms`, persisted in `localStorage`) between the flat candidate grid and a per-video strip view ordered by peak score with up to 7 chronologically sorted hit thumbnails per video.
   * When running sequential (`+ Scene` / `>>`) searches, cards automatically split into side-by-side **Stage 1 / Stage 2** thumbnails with a centered `+Δt` interval pill. Clicking either thumbnail opens the video player seeked directly to that stage's timestamp while setting default Mark In/Out bounds to the `[t1, t2]` sequence span (capped at 20s).
+* **Zero-Popup Split Cockpit Layout & Timeline Hit Markers (Task 07D):**
+  * Competition stopwatch, `+1W` wrong-attempt badge, and expandable predicted score breakdown sit cleanly in the top header capsule, leaving ~65% width for candidate scanning and ~35% for the persistent Right Verification & Submit Dock (`Layout: Cockpit`).
+  * Clicking any candidate card loads the stream directly inside the Right Inspector alongside an inline `+-10s` neighbor filmstrip and Target Submit controls without throwing a backdrop modal over the grid (click **`Popup`** anytime for full-screen expansion).
+  * Amber **Timeline Hit Markers** appear automatically along the scrubber bar at every matched candidate timestamp inside the active video so contestants can jump between intra-video hits in 1 click.
