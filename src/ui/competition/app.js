@@ -23,6 +23,10 @@
     allowedBatches: null,    // initialized in loadAllowedBatches()
     excludedVideos: new Set(),
 
+    // Task 07C: View Mode ('frames' or 'by_video')
+    viewMode: 'frames',
+    lastSeekSec: 0.0,
+
     // Target coordinates
     targetStartSec: 0.0,
     targetEndSec: 0.0,
@@ -73,6 +77,7 @@
   ]);
   const ALL_BATCH_LIST = Array.from(DRES_OFFICIAL_BATCHES);
   const ALLOWED_BATCHES_STORAGE_KEY = 'kis_allowed_batches';
+  const VIEW_MODE_STORAGE_KEY = 'kis_canvas_view_mode';
 
   // =========================================================================
   // DOM Elements Cache
@@ -178,6 +183,8 @@
     // Right Canvas: Candidate Grid
     candidateTotalCount: document.getElementById('candidateTotalCount'),
     candidateQueryEcho: document.getElementById('candidateQueryEcho'),
+    viewModeFramesBtn: document.getElementById('viewModeFramesBtn'),
+    viewModeVideoBtn: document.getElementById('viewModeVideoBtn'),
     clearAllCandidatesBtn: document.getElementById('clearAllCandidatesBtn'),
     candidateGrid: document.getElementById('candidateGrid'),
     gridLoadingOverlay: document.getElementById('gridLoadingOverlay'),
@@ -451,18 +458,21 @@
     dom.targetVideoFilterLabel.textContent = candidate.video_id;
 
     const start = Number(candidate.start_sec) || 0.0;
-    const end = Number(candidate.end_sec) || (start + 5.0);
+    const rawEnd = Number(candidate.end_sec) || (start + 5.0);
+    const seq = getSequenceBounds(candidate);
 
-    if (autoPreset === 'tight') {
-      applyPresetTight(start, end);
+    if (seq) {
+      updateTargetInputs(seq.startSec, seq.endSec);
+    } else if (autoPreset === 'tight') {
+      applyPresetTight(start, rawEnd);
     } else if (autoPreset === 'shot') {
-      applyPresetShot(start, end);
+      applyPresetShot(start, rawEnd);
     } else {
-      applyPresetWindow(start, end);
+      applyPresetWindow(start, rawEnd);
     }
 
-    // Highlight card in grid
-    document.querySelectorAll('.candidate-card').forEach(card => {
+    // Highlight card or strip hit in grid
+    document.querySelectorAll('.candidate-card, .video-hit-thumb-card').forEach(card => {
       if (card.dataset.kfid === candidate.keyframe_id) {
         card.classList.add('active-target');
       } else {
@@ -582,7 +592,9 @@
       return;
     }
 
-    const currTime = dom.modalVideoPlayer.currentTime || state.targetStartSec || 0.0;
+    const currTime = (dom.modalVideoPlayer && dom.modalVideoPlayer.readyState >= 1)
+      ? dom.modalVideoPlayer.currentTime
+      : (state.lastSeekSec || state.targetStartSec || 0.0);
     const s = Math.max(0, currTime - 0.5);
     const e = currTime + 0.5;
 
@@ -1073,6 +1085,231 @@
     }
   }
 
+  function getSequenceBounds(candidate) {
+    if (!candidate || !Array.isArray(candidate.stage_hits) || candidate.stage_hits.length < 2) {
+      return null;
+    }
+    const s0 = candidate.stage_hits[0];
+    const s1 = candidate.stage_hits[1];
+    const t0 = Number(s0.timestamp_sec || 0);
+    const t1 = Number(s1.timestamp_sec || 0);
+    const startSec = Math.max(0, Math.min(t0, t1));
+    const maxSec = Math.max(t0, t1);
+    // Cap default KIS range at 20s max span while keeping at least 1s width
+    const endSec = Math.max(startSec + 1.0, Math.min(maxSec, startSec + 20.0));
+    const deltaSec = (t1 - t0).toFixed(1);
+    return { isSeq: true, s0, s1, t0, t1, startSec, endSec, deltaSec };
+  }
+
+  function toggleOnlyVideoFilter(videoId) {
+    if (!videoId) return;
+    if (dom.targetVideoOnly.checked && state.activeVideoId === videoId) {
+      dom.targetVideoOnly.checked = false;
+      dom.targetVideoFilterLabel.textContent = 'This Video';
+    } else {
+      state.activeVideoId = videoId;
+      dom.targetVideoOnly.checked = true;
+      dom.targetVideoFilterLabel.textContent = videoId;
+    }
+    executeSearch();
+  }
+
+  function toggleSimCandidate(candidate) {
+    if (!candidate || !candidate.keyframe_id) return;
+    if (state.referenceKeyframe && state.referenceKeyframe.keyframe_id === candidate.keyframe_id) {
+      clearReferenceKeyframe(true);
+    } else {
+      setReferenceKeyframe(candidate);
+    }
+  }
+
+  function setViewMode(mode, rerender = true) {
+    const cleanMode = mode === 'by_video' ? 'by_video' : 'frames';
+    state.viewMode = cleanMode;
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, cleanMode);
+    } catch (e) {
+      console.warn('[VIEW] Failed saving view mode preference:', e);
+    }
+    if (dom.viewModeFramesBtn) {
+      dom.viewModeFramesBtn.classList.toggle('active', cleanMode === 'frames');
+    }
+    if (dom.viewModeVideoBtn) {
+      dom.viewModeVideoBtn.classList.toggle('active', cleanMode === 'by_video');
+    }
+    if (dom.candidateGrid) {
+      dom.candidateGrid.classList.toggle('by-video-mode', cleanMode === 'by_video');
+    }
+    if (rerender && state.allCandidates.length > 0) {
+      renderCandidateGrid();
+    }
+  }
+
+  function loadViewMode() {
+    let saved = 'frames';
+    try {
+      const raw = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (raw === 'by_video' || raw === 'frames') saved = raw;
+    } catch (e) {
+      saved = 'frames';
+    }
+    setViewMode(saved, false);
+  }
+
+  function groupCandidatesByVideo(candidates, maxHitsPerVideo = 7) {
+    const buckets = new Map();
+    candidates.forEach(item => {
+      if (!item || !item.video_id) return;
+      if (!buckets.has(item.video_id)) buckets.set(item.video_id, []);
+      buckets.get(item.video_id).push(item);
+    });
+
+    const groups = Array.from(buckets.entries()).map(([videoId, hits]) => {
+      let topScore = 0;
+      hits.forEach(h => {
+        const s = Number(h.score || 0);
+        if (s > topScore) topScore = s;
+      });
+      const topHits = hits
+        .slice()
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+        .slice(0, maxHitsPerVideo)
+        .sort((a, b) => Number(a.start_sec || 0) - Number(b.start_sec || 0));
+      return {
+        video_id: videoId,
+        top_score: topScore,
+        total_hits: hits.length,
+        hits: topHits
+      };
+    });
+
+    groups.sort((a, b) => b.top_score - a.top_score);
+    return groups.map((g, idx) => ({ ...g, rank: idx + 1 }));
+  }
+
+  function createVideoStripCard(group) {
+    const card = document.createElement('div');
+    card.className = 'video-strip-card';
+    card.dataset.vid = group.video_id;
+
+    let rankClass = '';
+    if (group.rank === 1) rankClass = 'gold';
+    else if (group.rank === 2) rankClass = 'silver';
+    else if (group.rank === 3) rankClass = 'bronze';
+
+    const batch = getVideoBatch(group.video_id);
+    const isLockedThis = Boolean(dom.targetVideoOnly && dom.targetVideoOnly.checked && state.activeVideoId === group.video_id);
+
+    card.innerHTML = `
+      <div class="video-strip-meta">
+        <div class="video-strip-top">
+          <div class="video-strip-rank-row">
+            <span class="strip-rank-badge ${rankClass}">#${group.rank}</span>
+            <span class="strip-batch-tag">${batch}</span>
+          </div>
+          <div class="video-strip-id">${group.video_id}</div>
+          <div class="video-strip-score-line">
+            <span>Top: ${Number(group.top_score || 0).toFixed(4)}</span>
+            <span>${group.hits.length}/${group.total_hits} hits</span>
+          </div>
+        </div>
+        <div class="video-strip-actions">
+          <button type="button" class="btn-card-aux btn-only-video ${isLockedThis ? 'active' : ''}" title="Toggle search lock inside ${group.video_id}">Only</button>
+          <button type="button" class="btn-card-aux btn-hide-video" title="Hide all results from ${group.video_id}">Hide</button>
+        </div>
+      </div>
+      <div class="video-strip-hits-row"></div>
+    `;
+
+    card.querySelector('.btn-only-video').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleOnlyVideoFilter(group.video_id);
+    });
+    card.querySelector('.btn-hide-video').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideVideoFromResults(group.video_id);
+    });
+
+    const hitsRow = card.querySelector('.video-strip-hits-row');
+    group.hits.forEach(hit => {
+      const seq = getSequenceBounds(hit);
+      const isSimThis = Boolean(state.referenceKeyframe && state.referenceKeyframe.keyframe_id === hit.keyframe_id);
+      const thumbEl = document.createElement('div');
+      thumbEl.className = 'video-hit-thumb-card';
+      thumbEl.dataset.kfid = hit.keyframe_id || '';
+
+      let mediaInner = '';
+      if (seq) {
+        mediaInner = `
+          <div class="video-hit-media dual-frame-wrapper" title="Click Stage 1 (${formatTime(seq.t0)}) or Stage 2 (${formatTime(seq.t1)})">
+            <div class="dual-stage-pane" data-stage="0">
+              <img src="${seq.s0.thumbnail_url || hit.thumbnail_url || ''}" alt="${hit.video_id} S1" loading="lazy" />
+              <span class="dual-stage-badge s1">S1 ${formatTime(seq.t0)}</span>
+            </div>
+            <div class="dual-stage-pane" data-stage="1">
+              <img src="${seq.s1.thumbnail_url || hit.thumbnail_url || ''}" alt="${hit.video_id} S2" loading="lazy" />
+              <span class="dual-stage-badge s2">S2 ${formatTime(seq.t1)}</span>
+            </div>
+            <span class="dual-delta-badge">+${seq.deltaSec}s</span>
+            <span class="video-hit-score">${Number(hit.score || 0).toFixed(4)}</span>
+          </div>
+        `;
+      } else {
+        mediaInner = `
+          <div class="video-hit-media" title="Inspect ${hit.video_id} @ ${formatTime(hit.start_sec)}">
+            <img src="${hit.thumbnail_url || ''}" alt="${hit.video_id}" loading="lazy" onerror="this.style.display='none'" />
+            <span class="video-hit-time">${formatTime(hit.start_sec)}</span>
+            <span class="video-hit-score">${Number(hit.score || 0).toFixed(4)}</span>
+          </div>
+        `;
+      }
+
+      thumbEl.innerHTML = `
+        ${mediaInner}
+        <div class="video-hit-footer">
+          <button type="button" class="btn-hit-sim ${isSimThis ? 'active' : ''}" title="Find visually similar frames (0ms)">Sim</button>
+          <button type="button" class="btn-hit-submit" title="1-Click KIS Submit">⚡ Submit</button>
+        </div>
+      `;
+
+      const mediaBox = thumbEl.querySelector('.video-hit-media');
+      if (seq) {
+        const p0 = thumbEl.querySelector('.dual-stage-pane[data-stage="0"]');
+        const p1 = thumbEl.querySelector('.dual-stage-pane[data-stage="1"]');
+        if (p0) p0.addEventListener('click', () => { setActiveTarget(hit, 'shot'); openVideoModal(hit, false, seq.t0); });
+        if (p1) p1.addEventListener('click', () => { setActiveTarget(hit, 'shot'); openVideoModal(hit, false, seq.t1); });
+      } else if (mediaBox) {
+        mediaBox.addEventListener('click', () => {
+          setActiveTarget(hit, 'tight');
+          openVideoModal(hit);
+        });
+      }
+
+      thumbEl.querySelector('.btn-hit-sim').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSimCandidate(hit);
+      });
+
+      const subBtn = thumbEl.querySelector('.btn-hit-submit');
+      subBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        setActiveTarget(hit, seq ? 'shot' : 'tight');
+        subBtn.disabled = true;
+        subBtn.textContent = '...';
+        try {
+          await submitKisPayload(hit.video_id, state.targetStartSec, state.targetEndSec);
+        } finally {
+          subBtn.disabled = false;
+          subBtn.textContent = '⚡ Submit';
+        }
+      });
+
+      hitsRow.appendChild(thumbEl);
+    });
+
+    return card;
+  }
+
   function renderCandidateGrid() {
     let candidates = state.allCandidates;
 
@@ -1083,9 +1320,13 @@
       candidates = candidates.filter(c => state.allowedBatches.has(getVideoBatch(c.video_id)));
     }
 
-    dom.candidateTotalCount.textContent = String(candidates.length);
+    const isByVideo = state.viewMode === 'by_video';
+    if (dom.candidateGrid) {
+      dom.candidateGrid.classList.toggle('by-video-mode', isByVideo);
+    }
 
     if (candidates.length === 0) {
+      dom.candidateTotalCount.textContent = '0';
       dom.candidateGrid.innerHTML = `
         <div class="grid-empty-state">
           <div class="empty-icon">⚠️</div>
@@ -1097,14 +1338,21 @@
     }
 
     dom.candidateGrid.innerHTML = '';
-    candidates.forEach((c, idx) => {
-      const card = createCandidateCard(c, idx + 1);
-      dom.candidateGrid.appendChild(card);
-    });
+    if (isByVideo) {
+      const groups = groupCandidatesByVideo(candidates, 7);
+      dom.candidateTotalCount.textContent = `${groups.length} videos (${candidates.length} hits)`;
+      groups.forEach(g => dom.candidateGrid.appendChild(createVideoStripCard(g)));
+    } else {
+      dom.candidateTotalCount.textContent = String(candidates.length);
+      candidates.forEach((c, idx) => {
+        const card = createCandidateCard(c, idx + 1);
+        dom.candidateGrid.appendChild(card);
+      });
+    }
 
     // Auto-select #1 candidate coordinates as default target
     if (candidates.length > 0 && !state.activeCandidate) {
-      setActiveTarget(candidates[0], 'tight');
+      setActiveTarget(candidates[0], getSequenceBounds(candidates[0]) ? 'shot' : 'tight');
     }
   }
 
@@ -1128,13 +1376,11 @@
       ? `<span class="badge-consensus-overlay" title="Matched ${matchedCues} independent cues">Consensus: ${matchedCues}</span>`
       : '';
 
-    // Sequence Timeline Pill (Task 07A)
+    // Sequence Timeline Pill & Dual-Frame Preview (Task 07A + 07C)
+    const seq = getSequenceBounds(candidate);
     let seqPillHtml = '';
-    if (Array.isArray(candidate.stage_hits) && candidate.stage_hits.length >= 2) {
-      const s0 = candidate.stage_hits[0];
-      const s1 = candidate.stage_hits[1];
-      const deltaSec = (Number(s1.timestamp_sec || 0) - Number(s0.timestamp_sec || 0)).toFixed(1);
-      seqPillHtml = `<div class="card-sequence-pill" title="Chronological sequence match">S1 ${formatTime(s0.timestamp_sec)} ➜ +${deltaSec}s ➜ S2 ${formatTime(s1.timestamp_sec)}</div>`;
+    if (seq) {
+      seqPillHtml = `<div class="card-sequence-pill" title="Chronological sequence match">S1 ${formatTime(seq.t0)} ➜ +${seq.deltaSec}s ➜ S2 ${formatTime(seq.t1)}</div>`;
     }
 
     // DRES Batch Badge
@@ -1151,7 +1397,36 @@
     const isLockedThis = Boolean(dom.targetVideoOnly && dom.targetVideoOnly.checked && state.activeVideoId === candidate.video_id);
     const isSimThis = Boolean(state.referenceKeyframe && state.referenceKeyframe.keyframe_id === candidate.keyframe_id);
 
-    card.innerHTML = `
+    const mediaWrapperHtml = seq
+      ? `
+      <div class="card-media-wrapper dual-frame-wrapper" title="Click Stage 1 (${formatTime(seq.t0)}) or Stage 2 (${formatTime(seq.t1)}) to inspect">
+        <span class="badge-rank-overlay ${rankBadgeClass}">#${rankNum}</span>
+        ${consensusHtml}
+        ${dresBadgeHtml}
+        <div class="dual-stage-pane" data-stage="0" title="Open player @ Stage 1 (${formatTime(seq.t0)})">
+          <img
+            src="${seq.s0.thumbnail_url || candidate.thumbnail_url || ''}"
+            alt="${candidate.video_id} S1"
+            class="dual-stage-thumb"
+            loading="lazy"
+            onerror="this.style.display='none'"
+          />
+          <span class="dual-stage-badge s1">S1 ${formatTime(seq.t0)}</span>
+        </div>
+        <div class="dual-stage-pane" data-stage="1" title="Open player @ Stage 2 (${formatTime(seq.t1)})">
+          <img
+            src="${seq.s1.thumbnail_url || candidate.thumbnail_url || ''}"
+            alt="${candidate.video_id} S2"
+            class="dual-stage-thumb"
+            loading="lazy"
+            onerror="this.style.display='none'"
+          />
+          <span class="dual-stage-badge s2">S2 ${formatTime(seq.t1)}</span>
+        </div>
+        <span class="dual-delta-badge">+${seq.deltaSec}s</span>
+      </div>
+      `
+      : `
       <div class="card-media-wrapper" title="Click to open video modal inspector">
         <span class="badge-rank-overlay ${rankBadgeClass}">#${rankNum}</span>
         ${consensusHtml}
@@ -1164,6 +1439,10 @@
           onerror="this.style.display='none'"
         />
       </div>
+      `;
+
+    card.innerHTML = `
+      ${mediaWrapperHtml}
 
       <div class="card-body">
         <div class="card-meta-row">
@@ -1202,41 +1481,35 @@
     const hideBtn = card.querySelector('.btn-hide-video');
     const submitBtn = card.querySelector('.btn-card-submit-kis');
 
-    const handleOpenPlayer = () => {
-      setActiveTarget(candidate, 'tight');
-      openVideoModal(candidate);
+    const handleOpenPlayer = (focusSecOverride = null) => {
+      setActiveTarget(candidate, seq ? 'shot' : 'tight');
+      openVideoModal(candidate, false, focusSecOverride);
     };
 
-    mediaWrap.addEventListener('click', handleOpenPlayer);
-    playBtn.addEventListener('click', handleOpenPlayer);
+    if (seq) {
+      const stage0Pane = card.querySelector('.dual-stage-pane[data-stage="0"]');
+      const stage1Pane = card.querySelector('.dual-stage-pane[data-stage="1"]');
+      if (stage0Pane) stage0Pane.addEventListener('click', () => handleOpenPlayer(seq.t0));
+      if (stage1Pane) stage1Pane.addEventListener('click', () => handleOpenPlayer(seq.t1));
+    } else if (mediaWrap) {
+      mediaWrap.addEventListener('click', () => handleOpenPlayer(null));
+    }
+
+    playBtn.addEventListener('click', () => handleOpenPlayer(null));
 
     stripBtn.addEventListener('click', () => {
-      setActiveTarget(candidate, 'tight');
+      setActiveTarget(candidate, seq ? 'shot' : 'tight');
       openVideoModal(candidate, true);
     });
 
     if (simBtn) {
       simBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (state.referenceKeyframe && state.referenceKeyframe.keyframe_id === candidate.keyframe_id) {
-          clearReferenceKeyframe(true);
-        } else {
-          setReferenceKeyframe(candidate);
-        }
+        toggleSimCandidate(candidate);
       });
     }
 
-    onlyBtn.addEventListener('click', () => {
-      if (dom.targetVideoOnly.checked && state.activeVideoId === candidate.video_id) {
-        dom.targetVideoOnly.checked = false;
-        dom.targetVideoFilterLabel.textContent = 'This Video';
-      } else {
-        state.activeVideoId = candidate.video_id;
-        dom.targetVideoOnly.checked = true;
-        dom.targetVideoFilterLabel.textContent = candidate.video_id;
-      }
-      executeSearch();
-    });
+    onlyBtn.addEventListener('click', () => toggleOnlyVideoFilter(candidate.video_id));
 
     if (hideBtn) {
       hideBtn.addEventListener('click', (e) => {
@@ -1247,7 +1520,7 @@
 
     submitBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      setActiveTarget(candidate, 'tight');
+      setActiveTarget(candidate, seq ? 'shot' : 'tight');
       submitBtn.disabled = true;
       submitBtn.textContent = 'SUBMITTING...';
       try {
@@ -1291,19 +1564,28 @@
     }
   }
 
-  function openVideoModal(candidate, jumpToFilmstrip = false) {
+  function openVideoModal(candidate, jumpToFilmstrip = false, focusSecOverride = null) {
     state.isVideoModalOpen = true;
     state.activeCandidate = candidate;
     state.activeVideoId = candidate.video_id;
 
+    const targetSec = focusSecOverride !== null && focusSecOverride !== undefined
+      ? Math.max(0, Number(focusSecOverride) || 0.0)
+      : Math.max(0, Number(candidate.start_sec) || 0.0);
+    state.lastSeekSec = targetSec;
+
     dom.modalVideoIdBadge.textContent = candidate.video_id;
-    dom.modalHeading.textContent = `${candidate.video_id} @ ${formatTime(candidate.start_sec)}`;
+    dom.modalHeading.textContent = `${candidate.video_id} @ ${formatTime(targetSec)}`;
 
-    const targetSec = Math.max(0, Number(candidate.start_sec) || 0.0);
-
-    // Reset Mark In / Out to candidate boundary
-    state.markInSec = targetSec;
-    state.markOutSec = Number(candidate.end_sec) || (targetSec + 5.0);
+    const seq = getSequenceBounds(candidate);
+    // Reset Mark In / Out cleanly (preserving [t1, t2] for sequential candidates)
+    if (seq) {
+      state.markInSec = seq.startSec;
+      state.markOutSec = seq.endSec;
+    } else {
+      state.markInSec = targetSec;
+      state.markOutSec = Number(candidate.end_sec) || (targetSec + 5.0);
+    }
     updateMarkDisplay();
 
     // Show modal or docked
@@ -1746,6 +2028,13 @@
       executeSearch();
     });
 
+    if (dom.viewModeFramesBtn) {
+      dom.viewModeFramesBtn.addEventListener('click', () => setViewMode('frames', true));
+    }
+    if (dom.viewModeVideoBtn) {
+      dom.viewModeVideoBtn.addEventListener('click', () => setViewMode('by_video', true));
+    }
+
     dom.clearAllCandidatesBtn.addEventListener('click', () => {
       state.allCandidates = [];
       renderCandidateGrid();
@@ -1886,6 +2175,7 @@
 
   async function init() {
     console.log('[KIS Workstation] Initializing application...');
+    loadViewMode();
     loadAllowedBatches();
     updateExcludedVideosUI();
     initEventListeners();

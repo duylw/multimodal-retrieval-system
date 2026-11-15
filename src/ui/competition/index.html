@@ -399,7 +399,10 @@
         </div>
 
         <div class="canvas-view-tools">
-          <span class="density-label">Grid View: High Density</span>
+          <div class="view-mode-switch" id="viewModeSwitch" title="Switch between flat frames grid and chronological video strips">
+            <button type="button" id="viewModeFramesBtn" class="btn-view-mode active" data-view="frames">Frames</button>
+            <button type="button" id="viewModeVideoBtn" class="btn-view-mode" data-view="by_video">By Video</button>
+          </div>
           <button id="clearAllCandidatesBtn" class="btn-tool-secondary">Clear Results</button>
         </div>
       </div>
