@@ -576,7 +576,7 @@ class MetadataDB:
 
         # Substring LIKE fallback: if FTS returned few results or missed compound/hyphenated tokens
         if len(rows) < pool_limit:
-            seen_ocr_ids = {r["ocr_id"] for r in rows}
+            seen_kf_ids = {r["keyframe_id"] for r in rows if r.get("keyframe_id")}
             like_candidates_to_try = [raw_query.strip()]
             for t in terms:
                 if len(t) >= 3 and t not in like_candidates_to_try:
@@ -602,8 +602,9 @@ class MetadataDB:
                     try:
                         for r in conn.execute(like_sql, tuple(like_params)).fetchall():
                             rd = dict(r)
-                            if rd["ocr_id"] not in seen_ocr_ids:
-                                seen_ocr_ids.add(rd["ocr_id"])
+                            kf_id = rd.get("keyframe_id")
+                            if kf_id and kf_id not in seen_kf_ids:
+                                seen_kf_ids.add(kf_id)
                                 rows.append(rd)
                     except Exception as e:
                         logger.warning(f"[WARNING] Substring LIKE fallback query failed: {e}")
@@ -615,7 +616,7 @@ class MetadataDB:
         folded_query = fold_vietnamese(raw_query)
         # Extract word and sub-token boundaries for robust alignment
         query_words = [w for w in re.findall(r"[a-z0-9]+", folded_query) if w]
-        spaceless_query = folded_query.replace(" ", "")
+        spaceless_query = "".join(query_words)
 
         max_bm25 = max((r.get("bm25_score", 1.0) for r in rows), default=1.0)
         if max_bm25 <= 0.0:
@@ -625,7 +626,7 @@ class MetadataDB:
             text_detected = r.get("text_detected", "")
             folded_text = fold_vietnamese(text_detected)
             cand_words = [w for w in re.findall(r"[a-z0-9]+", folded_text) if w]
-            spaceless_text = folded_text.replace(" ", "")
+            spaceless_text = "".join(cand_words)
 
             # Word-level alignment similarity: for each query word, find best matching word in candidate text
             if query_words and cand_words:

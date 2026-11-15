@@ -84,6 +84,7 @@ class DRESAnswer:
     mediaItemName: str
     start: int  # Timestamp in milliseconds
     end: int    # Timestamp in milliseconds
+    mediaItemCollectionName: Optional[str] = None
 
 
 @dataclass
@@ -128,5 +129,10 @@ class ParsedMultiCueQuery:
     stages: List[QueryStage] = field(default_factory=list)
     is_sequential: bool = False
     weights: Dict[str, float] = field(default_factory=lambda: {"visual": 1.0, "ocr": 1.5})
+    ocr_mode: str = "boost"  # "off", "boost", or "filter"
+    ocr_boost_weight: float = 0.25
+    anchor_stage: int = 0
+    min_sequence_gap_sec: float = 1.0
+    max_sequence_gap_sec: float = 30.0
 
 

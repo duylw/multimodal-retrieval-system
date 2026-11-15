@@ -170,8 +170,139 @@ def test_kis_endpoints():
     print("[OK] Task 06B KIS Context Filmstrip and DRES Submission tests passed!")
 
 
+def test_task_07a_visual_first_and_anchor_sequence():
+    """Verify Task 07A: no noisy OCR hijack, Visual-First OCR boost/filter, and Anchor-then-Scan sequence."""
+    import numpy as np
+    import faiss
+    from src.retrieval.search_engine import SearchEngine
+
+    # 1. QueryParser must NOT trigger noisy OCR on generic keywords like 'bảng', 'chữ', 'tiêu đề'
+    p_clean = QueryParser.parse("nguoi dan ong dung truoc bang mau do")
+    assert p_clean.stages[0].ocr_queries == []
+    assert p_clean.stages[0].visual_queries == ["nguoi dan ong dung truoc bang mau do"]
+
+    # Task 07A structured scenes + ocr_mode + anchor_stage dict parsing
+    p_seq = QueryParser.parse({
+        "scenes": [{"visual": "red car"}, {"visual": "ambulance"}],
+        "ocr_text": "HTV9",
+        "ocr_mode": "filter",
+        "anchor_stage": 1,
+        "min_gap_sec": 2.0,
+        "max_gap_sec": 45.0
+    })
+    assert p_seq.is_sequential
+    assert len(p_seq.stages) == 2
+    assert p_seq.stages[0].ocr_queries == ["HTV9"]
+    assert p_seq.ocr_mode == "filter"
+    assert p_seq.anchor_stage == 1
+    assert p_seq.min_sequence_gap_sec == 2.0
+    assert p_seq.max_sequence_gap_sec == 45.0
+
+    # 2. Build tiny synthetic FAISS IndexFlatIP in memory (dim=4) to test fusion & Anchor-then-Scan
+    class MockVecIndex:
+        def __init__(self, vecs, metas):
+            self.index = faiss.IndexFlatIP(4)
+            self.index.add(vecs.astype(np.float32))
+            self.id_to_metadata = metas
+            self.total_vectors = len(metas)
+
+        def search(self, q_vec, top_k=10):
+            sims, idxs = self.index.search(q_vec.astype(np.float32), min(top_k, self.total_vectors))
+            hits = []
+            for rank, (s, i) in enumerate(zip(sims[0], idxs[0]), start=1):
+                if i < 0:
+                    continue
+                item = dict(self.id_to_metadata[i])
+                item["score"] = float(s)
+                item["rank"] = rank
+                hits.append(item)
+            return hits
+
+    # Basis vectors: e0=[1,0,0,0] (Stage 1 cue), e1=[0,1,0,0] (Stage 2 cue), e2=[0,0,1,0] (Boosted Vid)
+    vecs = np.array([
+        [1.0, 0.0, 0.0, 0.0],   # 0: V_SINGLE @ 10s (Stage 1 only, no Stage 2 partner)
+        [0.95, 0.0, 0.0, 0.31], # 1: V_SAME_WIN @ 10s (Stage 1)
+        [0.0, 0.95, 0.0, 0.31], # 2: V_SAME_WIN @ 10.3s (delta=0.3s < min_gap=1.0s -> must reject!)
+        [0.85, 0.0, 0.52, 0.0], # 3: V_PAIR @ 10s (Stage 1)
+        [0.0, 0.90, 0.43, 0.0], # 4: V_PAIR @ 22s (Stage 2 after 12s gap -> MUST WIN!)
+        [0.82, 0.0, 0.57, 0.0], # 5: V_OCR_WIN @ 30s (Visual match + OCR match for boost/filter test)
+    ], dtype=np.float32)
+    vecs = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
+    metas = [
+        {"video_id": "V_SINGLE", "keyframe_id": "V_SINGLE_00001", "timestamp_sec": 10.0, "file_path": "V_SINGLE_1.jpg"},
+        {"video_id": "V_SAME_WIN", "keyframe_id": "V_SAME_WIN_00001", "timestamp_sec": 10.0, "file_path": "V_SW_1.jpg"},
+        {"video_id": "V_SAME_WIN", "keyframe_id": "V_SAME_WIN_00002", "timestamp_sec": 10.3, "file_path": "V_SW_2.jpg"},
+        {"video_id": "V_PAIR", "keyframe_id": "V_PAIR_00001", "timestamp_sec": 10.0, "file_path": "V_PAIR_1.jpg"},
+        {"video_id": "V_PAIR", "keyframe_id": "V_PAIR_00002", "timestamp_sec": 22.0, "file_path": "V_PAIR_2.jpg"},
+        {"video_id": "V_OCR_WIN", "keyframe_id": "V_OCR_WIN_00001", "timestamp_sec": 30.0, "file_path": "V_OCR_1.jpg"},
+    ]
+
+    class MockExtractor:
+        def extract_text_embedding(self, text: str):
+            t = text.lower()
+            if "stage1" in t:
+                return np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+            if "stage2" in t:
+                return np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)
+            return np.array([[0.8, 0.0, 0.6, 0.0]], dtype=np.float32)
+
+    engine = SearchEngine()
+    engine._vector_index = MockVecIndex(vecs, metas)
+    engine._visual_extractor = MockExtractor()
+
+    # Stub DB OCR responses to isolate fusion behavior deterministically
+    engine.db.get_keyframe_path = lambda kfid: f"{kfid}.jpg"
+    engine._search_ocr_cue = lambda q, top_k=500, video_id=None: [
+        {"video_id": "V_SINGLE", "keyframe_id": "V_SINGLE_00001", "timestamp_sec": 10.0, "score": 0.20, "text_detected": "noise"},
+        {"video_id": "V_OCR_WIN", "keyframe_id": "V_OCR_WIN_00001", "timestamp_sec": 30.0, "score": 0.92, "text_detected": "51B-999"},
+    ]
+
+    # 2a. OCR Boost: low-score noise (0.20 < 0.35) does NOT hijack, high-score OCR boosts V_OCR_WIN to #1
+    m_boost, tr_boost = engine.search_with_trace(
+        {"visual_queries": ["stage1"], "ocr_queries": ["51B-999"], "ocr_mode": "boost", "ocr_boost_weight": 0.5},
+        mode="auto",
+        top_k=5
+    )
+    assert len(m_boost) >= 2
+    assert m_boost[0].video_id == "V_OCR_WIN"
+    assert tr_boost["ocr_mode"] == "boost"
+
+    # 2b. OCR Filter: restricts results exclusively to quality-matched OCR videos (V_OCR_WIN)
+    m_filter, _ = engine.search_with_trace(
+        {"visual_queries": ["stage1"], "ocr_queries": ["51B-999"], "ocr_mode": "filter"},
+        mode="auto",
+        top_k=5
+    )
+    assert len(m_filter) == 1
+    assert m_filter[0].video_id == "V_OCR_WIN"
+
+    # 2c. Forward Anchor-then-Scan (Anchor=Stage 0): rejects V_SINGLE and V_SAME_WIN, picks V_PAIR
+    m_seq_fwd, _ = engine.search_with_trace(
+        {"scenes": [{"visual": "stage1"}, {"visual": "stage2"}], "anchor_stage": 0, "min_gap_sec": 1.0, "max_gap_sec": 30.0},
+        mode="auto",
+        top_k=5
+    )
+    assert len(m_seq_fwd) == 1
+    assert m_seq_fwd[0].video_id == "V_PAIR"
+    assert len(m_seq_fwd[0].cue_evidence.get("sequence_stages", [])) == 2
+    assert m_seq_fwd[0].start_sec <= 10.0 and m_seq_fwd[0].end_sec >= 22.0
+
+    # 2d. Backward Anchor-then-Scan (Anchor=Stage 1): scans backward from t=22s and finds Stage 0 at t=10s
+    m_seq_bwd, _ = engine.search_with_trace(
+        {"scenes": [{"visual": "stage1"}, {"visual": "stage2"}], "anchor_stage": 1, "min_gap_sec": 1.0, "max_gap_sec": 30.0},
+        mode="auto",
+        top_k=5
+    )
+    assert len(m_seq_bwd) == 1
+    assert m_seq_bwd[0].video_id == "V_PAIR"
+    assert m_seq_bwd[0].cue_evidence["sequence_stages"][0]["timestamp_sec"] < m_seq_bwd[0].cue_evidence["sequence_stages"][1]["timestamp_sec"]
+
+    print("[OK] Task 07A Visual-First OCR (Boost/Filter) & Anchor-then-Scan Sequential tests passed!")
+
+
 if __name__ == "__main__":
     test_query_parser()
     test_score_fusion()
     test_search_with_trace()
     test_kis_endpoints()
+    test_task_07a_visual_first_and_anchor_sequence()

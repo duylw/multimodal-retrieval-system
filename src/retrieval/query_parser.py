@@ -66,15 +66,62 @@ class QueryParser:
     def _parse_dict(cls, data: Dict[str, Any]) -> ParsedMultiCueQuery:
         """Parses structured JSON dictionary into ParsedMultiCueQuery."""
         weights = data.get("weights", {"visual": 1.0, "ocr": 1.5})
+        raw_ocr_mode = str(data.get("ocr_mode", "boost")).strip().lower()
+        ocr_mode = raw_ocr_mode if raw_ocr_mode in ("off", "boost", "filter") else "boost"
+        ocr_boost_weight = float(data.get("ocr_boost_weight", 0.25))
+        anchor_stage = max(0, int(data.get("anchor_stage", 0)))
+        min_gap_sec = max(0.0, float(data.get("min_gap_sec", data.get("min_sequence_gap_sec", 1.0))))
+        max_gap_sec = max(min_gap_sec + 1.0, float(data.get("max_gap_sec", data.get("max_sequence_gap_sec", 30.0))))
+
+        global_ocr = str(data.get("ocr_text") or data.get("ocr_query") or "").strip()
+        global_neg = str(data.get("negative_visual") or "").strip()
+
+        # Check for UI Multi-Stage 'scenes' payload ([{visual, ocr, negative_visual}])
+        scenes_data = data.get("scenes")
+        if scenes_data and isinstance(scenes_data, list):
+            stages: List[QueryStage] = []
+            for idx, sc in enumerate(scenes_data):
+                if isinstance(sc, str):
+                    st = cls._parse_stage(sc)
+                elif isinstance(sc, dict):
+                    v_list = [str(sc.get("visual", "")).strip()] if str(sc.get("visual", "")).strip() else []
+                    v_list.extend(str(q).strip() for q in sc.get("visual_queries", []) if str(q).strip())
+                    o_list = [str(sc.get("ocr", "")).strip()] if str(sc.get("ocr", "")).strip() else []
+                    o_list.extend(str(q).strip() for q in sc.get("ocr_queries", []) if str(q).strip())
+                    n_list = [str(sc.get("negative_visual", "")).strip()] if str(sc.get("negative_visual", "")).strip() else []
+                    n_list.extend(str(q).strip() for q in sc.get("negative_visual_queries", []) if str(q).strip())
+                    if idx == 0 and global_ocr and ocr_mode != "off" and global_ocr not in o_list:
+                        o_list.append(global_ocr)
+                    if idx == 0 and global_neg and global_neg not in n_list:
+                        n_list.append(global_neg)
+                    st = QueryStage(visual_queries=v_list, ocr_queries=o_list, negative_visual_queries=n_list)
+                else:
+                    continue
+                if st.visual_queries or st.ocr_queries:
+                    stages.append(st)
+
+            if stages:
+                return ParsedMultiCueQuery(
+                    stages=stages,
+                    is_sequential=len(stages) > 1,
+                    weights=weights,
+                    ocr_mode=ocr_mode,
+                    ocr_boost_weight=ocr_boost_weight,
+                    anchor_stage=min(anchor_stage, len(stages) - 1),
+                    min_sequence_gap_sec=min_gap_sec,
+                    max_sequence_gap_sec=max_gap_sec
+                )
 
         # Check for sequence stages
         seq_stages_data = data.get("sequence_stages")
         if seq_stages_data and isinstance(seq_stages_data, list):
-            stages: List[QueryStage] = []
-            for st in seq_stages_data:
+            stages = []
+            for idx, st in enumerate(seq_stages_data):
                 v_q = [str(q).strip() for q in st.get("visual_queries", []) if str(q).strip()]
                 o_q = [str(q).strip() for q in st.get("ocr_queries", []) if str(q).strip()]
                 neg_v_q = [str(q).strip() for q in st.get("negative_visual_queries", []) if str(q).strip()]
+                if idx == 0 and global_ocr and ocr_mode != "off" and global_ocr not in o_q:
+                    o_q.append(global_ocr)
                 if v_q or o_q:
                     stages.append(QueryStage(
                         visual_queries=v_q,
@@ -83,19 +130,57 @@ class QueryParser:
                     ))
 
             if stages:
-                return ParsedMultiCueQuery(stages=stages, is_sequential=len(stages) > 1, weights=weights)
+                return ParsedMultiCueQuery(
+                    stages=stages,
+                    is_sequential=len(stages) > 1,
+                    weights=weights,
+                    ocr_mode=ocr_mode,
+                    ocr_boost_weight=ocr_boost_weight,
+                    anchor_stage=min(anchor_stage, len(stages) - 1),
+                    min_sequence_gap_sec=min_gap_sec,
+                    max_sequence_gap_sec=max_gap_sec
+                )
 
-        # Flat visual and OCR queries
+        # Flat visual and OCR queries (supporting string 'query'/'visual_query' + separate 'ocr_text')
+        raw_query_str = str(data.get("query") or data.get("visual_query") or "").strip()
+        if raw_query_str:
+            parsed_str = cls.parse(raw_query_str)
+            if global_ocr and ocr_mode != "off" and parsed_str.stages:
+                if global_ocr not in parsed_str.stages[0].ocr_queries:
+                    parsed_str.stages[0].ocr_queries.append(global_ocr)
+            if global_neg and parsed_str.stages:
+                if global_neg not in parsed_str.stages[0].negative_visual_queries:
+                    parsed_str.stages[0].negative_visual_queries.append(global_neg)
+            parsed_str.ocr_mode = ocr_mode
+            parsed_str.ocr_boost_weight = ocr_boost_weight
+            parsed_str.anchor_stage = min(anchor_stage, max(0, len(parsed_str.stages) - 1))
+            parsed_str.min_sequence_gap_sec = min_gap_sec
+            parsed_str.max_sequence_gap_sec = max_gap_sec
+            return parsed_str
+
         visual_queries = [str(q).strip() for q in data.get("visual_queries", []) if str(q).strip()]
         ocr_queries = [str(q).strip() for q in data.get("ocr_queries", []) if str(q).strip()]
+        if global_ocr and ocr_mode != "off" and global_ocr not in ocr_queries:
+            ocr_queries.append(global_ocr)
         neg_visual_queries = [str(q).strip() for q in data.get("negative_visual_queries", []) if str(q).strip()]
+        if global_neg and global_neg not in neg_visual_queries:
+            neg_visual_queries.append(global_neg)
 
         single_stage = QueryStage(
             visual_queries=visual_queries,
             ocr_queries=ocr_queries,
             negative_visual_queries=neg_visual_queries
         )
-        return ParsedMultiCueQuery(stages=[single_stage], is_sequential=False, weights=weights)
+        return ParsedMultiCueQuery(
+            stages=[single_stage],
+            is_sequential=False,
+            weights=weights,
+            ocr_mode=ocr_mode,
+            ocr_boost_weight=ocr_boost_weight,
+            anchor_stage=0,
+            min_sequence_gap_sec=min_gap_sec,
+            max_sequence_gap_sec=max_gap_sec
+        )
 
     @classmethod
     def _parse_sequence(cls, raw_text: str) -> ParsedMultiCueQuery:
@@ -183,23 +268,13 @@ class QueryParser:
     def _parse_natural_language(cls, text: str) -> QueryStage:
         """
         Rule-based triage for natural language descriptions without explicit syntax (< 1ms).
-        Detects vehicle plates or text cues automatically.
+        Extracts strict vehicle plate formats automatically while avoiding noisy keyword hijacking.
+        Explicit on-screen text must use quoted phrases, 'ocr:' syntax, or the dedicated UI OCR box.
         """
         ocrs: List[str] = []
         plate_matches = cls.LICENSE_PLATE_REGEX.findall(text)
         if plate_matches:
             ocrs.extend(plate_matches)
-
-        # Detect OCR trigger words (e.g. 'biển số 51B 12345')
-        for kw in cls.OCR_TRIGGER_KEYWORDS:
-            pattern = rf"{kw}\s+([A-Za-z0-9\s.-]+)"
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                extracted = match.group(1).strip()
-                # Stop at common sentence separators
-                extracted = re.split(r"[,.;]|\b(?:đang|chạy|vào|và)\b", extracted, flags=re.IGNORECASE)[0].strip()
-                if extracted and len(extracted) >= 3 and extracted not in ocrs:
-                    ocrs.append(extracted)
 
         # The full natural language description serves as the visual context
         return QueryStage(visual_queries=[text], ocr_queries=ocrs)
