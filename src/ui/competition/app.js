@@ -395,6 +395,9 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Connection failed');
 
+      if (payload.password) {
+        dom.dresPassword.value = '';
+      }
       alert('[OK] DRES session updated successfully!');
       dom.dresSettingsDrawer.classList.add('hidden');
       await fetchDresStatus();

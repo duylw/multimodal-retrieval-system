@@ -807,6 +807,7 @@ def configure_dres_session(payload: Dict[str, Any]) -> Dict[str, Any]:
         client.base_url = base_url.rstrip("/")
 
     eval_id = str(payload.get("evaluation_id", "")).strip()
+    has_explicit_eval = bool(eval_id and eval_id != "offline_kis_eval")
     if eval_id:
         _dres_eval_id = eval_id
 
@@ -822,9 +823,11 @@ def configure_dres_session(payload: Dict[str, Any]) -> Dict[str, Any]:
     if username and password:
         try:
             client.login(username=username, password=password)
-            active_ev = client.get_active_evaluation()
-            if active_ev and active_ev.get("id"):
-                _dres_eval_id = str(active_ev["id"])
+            # Only auto-select server's first active evaluation if user did not specify one explicitly
+            if not has_explicit_eval:
+                active_ev = client.get_active_evaluation()
+                if active_ev and active_ev.get("id"):
+                    _dres_eval_id = str(active_ev["id"])
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"DRES login failed: {e}")
 
@@ -869,7 +872,11 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
             detail=f"Invalid interval: start_sec ({start_sec}) must be >= 0 and <= end_sec ({end_sec})."
         )
 
-    eval_id = str(payload.get("evaluation_id") or _dres_eval_id or "offline_kis_eval").strip()
+    global _dres_eval_id
+    explicit_eval = str(payload.get("evaluation_id", "")).strip()
+    if explicit_eval and explicit_eval != "offline_kis_eval":
+        _dres_eval_id = explicit_eval
+    eval_id = explicit_eval or _dres_eval_id or "offline_kis_eval"
     dry_run = bool(payload.get("dry_run", False))
     allow_duplicate = bool(payload.get("allow_duplicate", False))
 
@@ -917,6 +924,7 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "DRY_RUN_ACCEPTED",
             "message": f"[OK] Dry-Run Accepted: {clean_id} [{start_ms}ms - {end_ms}ms]",
+            "evaluation_id": eval_id,
             "video_id": clean_id,
             "start_ms": start_ms,
             "end_ms": end_ms,
@@ -947,6 +955,7 @@ def submit_to_dres(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": sub_status,
             "message": f"[OK] DRES Live Response ({sub_status}): {clean_id} [{start_ms}ms - {end_ms}ms]",
+            "evaluation_id": eval_id,
             "video_id": clean_id,
             "start_ms": start_ms,
             "end_ms": end_ms,
