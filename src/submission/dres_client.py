@@ -31,7 +31,12 @@ def seconds_to_ms(seconds: float) -> int:
     return int(round(max(0.0, seconds) * 1000.0))
 
 
-def create_kis_submission_payload(video_id: str, start_sec: float, end_sec: float) -> Dict[str, Any]:
+def create_kis_submission_payload(
+    video_id: str,
+    start_sec: float,
+    end_sec: float,
+    collection_name: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Build a valid DRES API v2 KIS submission dictionary.
     
@@ -42,6 +47,7 @@ def create_kis_submission_payload(video_id: str, start_sec: float, end_sec: floa
                 "answers": [
                     {
                         "mediaItemName": "<VIDEO_ID>",
+                        "mediaItemCollectionName": "<COLLECTION_NAME>",  # optional
                         "start": <TIME_IN_MS>,
                         "end": <TIME_IN_MS>
                     }
@@ -60,16 +66,19 @@ def create_kis_submission_payload(video_id: str, start_sec: float, end_sec: floa
     if start_ms > end_ms:
         raise ValueError(f"start_ms ({start_ms}) must be <= end_ms ({end_ms})")
     
+    answer: Dict[str, Any] = {
+        "mediaItemName": clean_id,
+        "start": start_ms,
+        "end": end_ms
+    }
+    clean_collection = collection_name.strip() if collection_name else ""
+    if clean_collection:
+        answer["mediaItemCollectionName"] = clean_collection
+
     return {
         "answerSets": [
             {
-                "answers": [
-                    {
-                        "mediaItemName": clean_id,
-                        "start": start_ms,
-                        "end": end_ms
-                    }
-                ]
+                "answers": [answer]
             }
         ]
     }
@@ -115,14 +124,25 @@ class DRESClient:
     and duplicate-guarded KIS submission.
     """
 
-    def __init__(self, base_url: str = "https://eventretrieval.one", session_id: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: str = "https://eventretrieval.one",
+        session_id: Optional[str] = None,
+        collection_name: Optional[str] = None
+    ):
         self.base_url = base_url.rstrip("/")
         self.session_id = session_id
+        self.collection_name: Optional[str] = collection_name.strip() if collection_name and collection_name.strip() else None
         self._submitted_cache: Set[Tuple[str, str, int, int]] = set()
 
     def set_session_id(self, session_id: str) -> None:
         """Set or update the active session ID token."""
         self.session_id = session_id.strip()
+
+    def set_collection_name(self, collection_name: Optional[str]) -> None:
+        """Set or clear the optional DRES mediaItemCollectionName."""
+        cleaned = str(collection_name).strip() if collection_name is not None else ""
+        self.collection_name = cleaned or None
 
     def clear_cache(self) -> None:
         """Clear the submitted answers duplicate cache."""
@@ -199,7 +219,8 @@ class DRESClient:
         start_sec: float,
         end_sec: float,
         timeout: float = 10.0,
-        allow_duplicate: bool = False
+        allow_duplicate: bool = False,
+        collection_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Submit a candidate video moment to DRES server via:
@@ -213,6 +234,11 @@ class DRESClient:
         clean_id = format_media_item_name(video_id)
         start_ms = seconds_to_ms(start_sec)
         end_ms = seconds_to_ms(end_sec)
+        effective_collection = (
+            collection_name.strip()
+            if collection_name is not None and collection_name.strip()
+            else self.collection_name
+        )
         cache_key = (evaluation_id, clean_id, start_ms, end_ms)
 
         if not allow_duplicate and cache_key in self._submitted_cache:
@@ -224,10 +250,10 @@ class DRESClient:
             return {
                 "status": "DUPLICATE_PREVENTED",
                 "message": warning_msg,
-                "payload": create_kis_submission_payload(clean_id, start_sec, end_sec)
+                "payload": create_kis_submission_payload(clean_id, start_sec, end_sec, effective_collection)
             }
 
-        payload = create_kis_submission_payload(clean_id, start_sec, end_sec)
+        payload = create_kis_submission_payload(clean_id, start_sec, end_sec, effective_collection)
         url = f"{self.base_url}/api/v2/submit/{evaluation_id}"
         params = {"session": self.session_id}
         headers = {"Content-Type": "application/json"}
@@ -266,6 +292,7 @@ def main() -> None:
     parser.add_argument("--password", default=None, help="DRES password for login.")
     parser.add_argument("--list-evals", action="store_true", help="List available evaluations.")
     parser.add_argument("--eval-id", default=None, help="Evaluation ID to submit to.")
+    parser.add_argument("--collection-name", default=None, help="Optional DRES mediaItemCollectionName.")
     parser.add_argument("--video-id", default=None, help="Video ID to submit (e.g. L01_V001).")
     parser.add_argument("--start", type=float, default=0.0, help="Start time in seconds.")
     parser.add_argument("--end", type=float, default=0.0, help="End time in seconds.")
@@ -277,11 +304,11 @@ def main() -> None:
         if not args.video_id:
             logger.error("[ERROR] --video-id required for --dry-run.")
             sys.exit(1)
-        payload = create_kis_submission_payload(args.video_id, args.start, args.end)
+        payload = create_kis_submission_payload(args.video_id, args.start, args.end, args.collection_name)
         logger.info(f"[OK] Formatted Dry-Run KIS Payload:\n{payload}")
         return
 
-    client = DRESClient(base_url=args.base_url, session_id=args.session_id)
+    client = DRESClient(base_url=args.base_url, session_id=args.session_id, collection_name=args.collection_name)
 
     if args.username and args.password:
         client.login(args.username, args.password)
