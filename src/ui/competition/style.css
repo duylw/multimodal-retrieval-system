@@ -2841,3 +2841,294 @@ body.theme-dark {
   background: var(--accent-emerald);
   color: #020617;
 }
+
+/* ==========================================================================
+   Task 07D: Header Timer Capsule, Split Cockpit Layout & Timeline Hit Markers
+   ========================================================================== */
+
+.header-timer-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.header-timer-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 7px;
+  background-color: #0b111e;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+}
+
+.header-clock {
+  font-size: 13px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.4px;
+}
+
+.header-clock-sep,
+.header-clock-limit {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.btn-timer-mini {
+  height: 20px;
+  padding: 0 6px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-timer-mini.primary {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+
+.btn-timer-mini.danger {
+  background-color: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fda4af;
+}
+
+.btn-timer-mini.danger:hover {
+  background-color: var(--accent-rose);
+  color: #fff;
+}
+
+.btn-timer-score {
+  height: 20px;
+  padding: 0 6px;
+  background-color: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 4px;
+  color: #34d399;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-timer-score:hover {
+  background-color: rgba(16, 185, 129, 0.28);
+}
+
+.timer-details-popover {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  width: 268px;
+  background-color: var(--bg-modal);
+  border: 1px solid var(--border-focus);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timer-details-popover.hidden {
+  display: none;
+}
+
+.popover-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Split Cockpit Right Inspector (~35% width, Zero-Popup by default) */
+.docked-player-panel {
+  position: static;
+  width: clamp(390px, 35vw, 520px);
+  flex-shrink: 0;
+  background-color: var(--bg-sidebar);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: none;
+  z-index: 15;
+}
+
+.docked-player-panel.hidden {
+  display: none;
+}
+
+.docked-player-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background-color: #0b111e;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.docked-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-dock-action,
+.btn-close-docked {
+  height: 24px;
+  padding: 0 8px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-dock-action:hover {
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+
+.btn-close-docked:hover {
+  border-color: var(--accent-rose);
+  color: #fda4af;
+}
+
+.docked-player-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docked-player-container {
+  padding: 8px 10px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: visible;
+}
+
+.docked-player-container .video-player-wrapper {
+  max-height: 290px;
+}
+
+.docked-player-container .transport-controls-row {
+  gap: 5px;
+}
+
+.docked-player-container .btn-stepper {
+  height: 24px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.docked-player-container .btn-stepper-play {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.docked-player-container .btn-mark,
+.docked-player-container .btn-preview-range,
+.docked-player-container .btn-modal-submit-range,
+.docked-player-container .btn-modal-submit-playhead {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+.docked-player-container .filmstrip-card {
+  width: 96px;
+}
+
+.cockpit-submit-dock {
+  padding: 0 10px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cockpit-submit-dock .sidebar-card {
+  padding: 9px 10px;
+}
+
+.cockpit-submit-dock .submission-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.cockpit-submit-dock .btn-submit-primary,
+.cockpit-submit-dock .btn-submit-secondary {
+  height: 34px;
+  font-size: 11px;
+}
+
+.cockpit-submit-dock .submission-history-feed {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Video Timeline Search Hit Markers */
+.timeline-hit-markers {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.timeline-hit-marker {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 4px;
+  transform: translateX(-50%);
+  background-color: #fbbf24;
+  border: 1px solid #020617;
+  border-radius: 2px;
+  padding: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.92;
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+.timeline-hit-marker:hover {
+  transform: translateX(-50%) scaleY(1.35) scaleX(1.35);
+  background-color: #f59e0b;
+  z-index: 5;
+}
+
+@media (max-width: 1100px) {
+  .workstation-workspace {
+    flex-direction: column;
+  }
+  .docked-player-panel {
+    width: 100%;
+    max-height: 46vh;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+}

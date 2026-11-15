@@ -45,8 +45,8 @@
     timerIntervalId: null,
     wrongAttempts: 0,
 
-    // Layout Mode ('popup' or 'docked')
-    layoutMode: 'popup',
+    // Layout Mode ('docked' = Zero-Popup Cockpit by default, or 'popup')
+    layoutMode: 'docked',
 
     // DRES Client Status
     dresStatus: {
@@ -136,7 +136,10 @@
     saveDresConfigBtn: document.getElementById('saveDresConfigBtn'),
     clearDresCacheBtn: document.getElementById('clearDresCacheBtn'),
 
-    // Left Sidebar: Stopwatch & Score Decay
+    // Header Timer Capsule & Score Breakdown Popover
+    headerTimerWrapper: document.getElementById('headerTimerWrapper'),
+    timerDetailsBtn: document.getElementById('timerDetailsBtn'),
+    timerDetailsPopover: document.getElementById('timerDetailsPopover'),
     taskModeTextual: document.getElementById('taskModeTextual'),
     taskModeVideo: document.getElementById('taskModeVideo'),
     stopwatchClock: document.getElementById('stopwatchClock'),
@@ -203,6 +206,7 @@
     playerTransportBar: document.getElementById('playerTransportBar'),
     videoTimelineSlider: document.getElementById('videoTimelineSlider'),
     timelineRangeHighlight: document.getElementById('timelineRangeHighlight'),
+    timelineHitMarkers: document.getElementById('timelineHitMarkers'),
 
     // Steppers & Transport
     stepBack5s: document.getElementById('stepBack5s'),
@@ -225,8 +229,10 @@
     filmstripStatus: document.getElementById('filmstripStatus'),
     filmstripCarousel: document.getElementById('filmstripCarousel'),
 
-    // Docked Panel
+    // Docked Cockpit Panel
     dockedPlayerPanel: document.getElementById('dockedPlayerPanel'),
+    dockedPlayerTitle: document.getElementById('dockedPlayerTitle'),
+    expandPopupBtn: document.getElementById('expandPopupBtn'),
     dockedPlayerContainer: document.getElementById('dockedPlayerContainer'),
     closeDockedPlayerBtn: document.getElementById('closeDockedPlayerBtn')
   };
@@ -296,7 +302,7 @@
   function startStopwatch() {
     if (state.isTimerRunning) return;
     state.isTimerRunning = true;
-    dom.timerStartPauseBtn.textContent = 'Pause Timer';
+    dom.timerStartPauseBtn.textContent = 'Pause';
     dom.timerStartPauseBtn.style.backgroundColor = '#f59e0b';
 
     state.timerIntervalId = setInterval(() => {
@@ -310,14 +316,14 @@
     state.isTimerRunning = false;
     clearInterval(state.timerIntervalId);
     state.timerIntervalId = null;
-    dom.timerStartPauseBtn.textContent = 'Resume Timer';
+    dom.timerStartPauseBtn.textContent = 'Resume';
     dom.timerStartPauseBtn.style.backgroundColor = '#2563eb';
   }
 
   function resetStopwatch() {
     pauseStopwatch();
     state.elapsedSeconds = 0;
-    dom.timerStartPauseBtn.textContent = 'Start Timer';
+    dom.timerStartPauseBtn.textContent = 'Start';
     dom.timerStartPauseBtn.style.backgroundColor = '#2563eb';
     updateStopwatchDisplay();
   }
@@ -1354,6 +1360,9 @@
     if (candidates.length > 0 && !state.activeCandidate) {
       setActiveTarget(candidates[0], getSequenceBounds(candidates[0]) ? 'shot' : 'tight');
     }
+    if (state.activeVideoId) {
+      renderTimelineHitMarkers(state.activeVideoId);
+    }
   }
 
   function createCandidateCard(candidate, rankNum) {
@@ -1541,14 +1550,13 @@
   function attachPlayerToModal() {
     if (dom.modalBody && dom.playerWrapper && dom.playerTransportBar) {
       if (dom.playerWrapper.parentElement !== dom.modalBody) {
-        dom.modalBody.insertBefore(dom.playerWrapper, dom.modalBody.firstChild);
+        dom.modalBody.appendChild(dom.playerWrapper);
       }
       if (dom.playerTransportBar.parentElement !== dom.modalBody) {
-        if (dom.modalFilmstripSection && dom.modalFilmstripSection.parentElement === dom.modalBody) {
-          dom.modalBody.insertBefore(dom.playerTransportBar, dom.modalFilmstripSection);
-        } else {
-          dom.modalBody.appendChild(dom.playerTransportBar);
-        }
+        dom.modalBody.appendChild(dom.playerTransportBar);
+      }
+      if (dom.modalFilmstripSection && dom.modalFilmstripSection.parentElement !== dom.modalBody) {
+        dom.modalBody.appendChild(dom.modalFilmstripSection);
       }
     }
   }
@@ -1561,11 +1569,13 @@
       if (dom.playerTransportBar.parentElement !== dom.dockedPlayerContainer) {
         dom.dockedPlayerContainer.appendChild(dom.playerTransportBar);
       }
+      if (dom.modalFilmstripSection && dom.modalFilmstripSection.parentElement !== dom.dockedPlayerContainer) {
+        dom.dockedPlayerContainer.appendChild(dom.modalFilmstripSection);
+      }
     }
   }
 
   function openVideoModal(candidate, jumpToFilmstrip = false, focusSecOverride = null) {
-    state.isVideoModalOpen = true;
     state.activeCandidate = candidate;
     state.activeVideoId = candidate.video_id;
 
@@ -1576,6 +1586,9 @@
 
     dom.modalVideoIdBadge.textContent = candidate.video_id;
     dom.modalHeading.textContent = `${candidate.video_id} @ ${formatTime(targetSec)}`;
+    if (dom.dockedPlayerTitle) {
+      dom.dockedPlayerTitle.textContent = `Inspector: ${candidate.video_id} @ ${formatTime(targetSec)}`;
+    }
 
     const seq = getSequenceBounds(candidate);
     // Reset Mark In / Out cleanly (preserving [t1, t2] for sequential candidates)
@@ -1588,18 +1601,20 @@
     }
     updateMarkDisplay();
 
-    // Show modal or docked
+    // Zero-Popup Docked Cockpit vs Pop-up Modal
     if (state.layoutMode === 'docked') {
+      state.isVideoModalOpen = false;
       attachPlayerToDocked();
       dom.dockedPlayerPanel.classList.remove('hidden');
       dom.videoModal.classList.add('hidden');
     } else {
+      state.isVideoModalOpen = true;
       attachPlayerToModal();
       dom.videoModal.classList.remove('hidden');
       dom.dockedPlayerPanel.classList.add('hidden');
     }
 
-    // Unfocus search bar or active inputs so hotkeys immediately work on modal
+    // Unfocus search bar or active inputs so single-hand hotkeys work cleanly
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
       document.activeElement.blur();
     }
@@ -1614,6 +1629,7 @@
         player.currentTime = targetSec;
         dom.videoTimelineSlider.value = targetSec;
         dom.modalTimeIndicator.textContent = `${formatTime(targetSec)} / ${formatTime(player.duration || 0)}`;
+        renderTimelineHitMarkers(candidate.video_id);
         const p = player.play();
         if (p !== undefined) {
           p.catch(err => {
@@ -1633,39 +1649,117 @@
       applySeekAndPlay();
     }
 
-    // Load Temporal Filmstrip
+    // Load Inline Neighbor Filmstrip (+-10s)
     loadTemporalFilmstrip(candidate.video_id, targetSec);
   }
 
   function closeVideoModal() {
     state.isVideoModalOpen = false;
-    dom.modalVideoPlayer.pause();
     dom.videoModal.classList.add('hidden');
-    dom.dockedPlayerPanel.classList.add('hidden');
-    attachPlayerToModal();
+    if (state.layoutMode === 'docked') {
+      attachPlayerToDocked();
+      dom.dockedPlayerPanel.classList.remove('hidden');
+    } else {
+      dom.modalVideoPlayer.pause();
+      dom.dockedPlayerPanel.classList.add('hidden');
+      attachPlayerToModal();
+    }
     if (dom.candidateGrid) {
       dom.candidateGrid.focus();
     }
   }
 
+  function expandDockedToPopup() {
+    state.isVideoModalOpen = true;
+    attachPlayerToModal();
+    dom.videoModal.classList.remove('hidden');
+  }
+
   function toggleDockedLayout() {
     if (state.layoutMode === 'popup') {
       state.layoutMode = 'docked';
-      dom.layoutModeLabel.textContent = 'Docked';
-      if (state.isVideoModalOpen) {
-        attachPlayerToDocked();
-        dom.videoModal.classList.add('hidden');
-        dom.dockedPlayerPanel.classList.remove('hidden');
-      }
+      state.isVideoModalOpen = false;
+      dom.layoutModeLabel.textContent = 'Cockpit';
+      attachPlayerToDocked();
+      dom.videoModal.classList.add('hidden');
+      dom.dockedPlayerPanel.classList.remove('hidden');
     } else {
       state.layoutMode = 'popup';
       dom.layoutModeLabel.textContent = 'Popup';
       dom.dockedPlayerPanel.classList.add('hidden');
       attachPlayerToModal();
-      if (state.isVideoModalOpen) {
+      if (state.activeVideoId) {
+        state.isVideoModalOpen = true;
         dom.videoModal.classList.remove('hidden');
       }
     }
+  }
+
+  function renderTimelineHitMarkers(videoId) {
+    if (!dom.timelineHitMarkers) return;
+    dom.timelineHitMarkers.innerHTML = '';
+
+    const dur = dom.modalVideoPlayer ? (dom.modalVideoPlayer.duration || state.currentVideoDuration || 0) : 0;
+    if (!videoId || !dur || dur <= 0) return;
+
+    const rawPoints = [];
+    state.allCandidates.forEach((c, idx) => {
+      if (!c || c.video_id !== videoId) return;
+      const rank = idx + 1;
+      const score = Number(c.score || 0);
+      if (Array.isArray(c.stage_hits) && c.stage_hits.length >= 2) {
+        c.stage_hits.forEach(sh => {
+          rawPoints.push({
+            ts: Math.max(0, Math.min(dur, Number(sh.timestamp_sec || 0))),
+            score,
+            rank
+          });
+        });
+      } else {
+        rawPoints.push({
+          ts: Math.max(0, Math.min(dur, Number(c.start_sec || 0))),
+          score,
+          rank
+        });
+      }
+    });
+
+    // Keep highest-scoring tick per 0.5s bucket to keep scrubber clean
+    rawPoints.sort((a, b) => b.score - a.score);
+    const deduped = [];
+    rawPoints.forEach(pt => {
+      if (!deduped.some(existing => Math.abs(existing.ts - pt.ts) < 0.5)) {
+        deduped.push(pt);
+      }
+    });
+
+    deduped.sort((a, b) => a.ts - b.ts);
+    deduped.forEach(pt => {
+      const pct = Math.max(0.5, Math.min(99.5, (pt.ts / dur) * 100));
+      const tick = document.createElement('button');
+      tick.type = 'button';
+      tick.className = 'timeline-hit-marker';
+      tick.style.left = `${pct.toFixed(2)}%`;
+      tick.title = `Hit #${pt.rank} @ ${formatTime(pt.ts)} (score: ${pt.score.toFixed(4)})`;
+      tick.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dom.modalVideoPlayer) {
+          dom.modalVideoPlayer.currentTime = pt.ts;
+        }
+        state.lastSeekSec = pt.ts;
+        if (dom.videoTimelineSlider) {
+          dom.videoTimelineSlider.value = pt.ts;
+        }
+        if (dom.modalTimeIndicator) {
+          dom.modalTimeIndicator.textContent = `${formatTime(pt.ts)} / ${formatTime(dur)}`;
+        }
+        if (dom.dockedPlayerTitle) {
+          dom.dockedPlayerTitle.textContent = `Inspector: ${videoId} @ ${formatTime(pt.ts)}`;
+        }
+        dom.modalHeading.textContent = `${videoId} @ ${formatTime(pt.ts)}`;
+      });
+      dom.timelineHitMarkers.appendChild(tick);
+    });
   }
 
   function updateMarkDisplay() {
@@ -1744,12 +1838,12 @@
     dom.filmstripCarousel.innerHTML = '';
 
     try {
-      const res = await fetch(`/api/videos/${videoId}/context?timestamp_sec=${centerSec}&window_sec=15.0`);
+      const res = await fetch(`/api/videos/${videoId}/context?timestamp_sec=${centerSec}&window_sec=10.0`);
       if (!res.ok) throw new Error('Filmstrip not available');
 
       const data = await res.json();
       const frames = data.frames || [];
-      dom.filmstripStatus.textContent = `${frames.length} keyframes in +-15s horizon`;
+      dom.filmstripStatus.textContent = `${frames.length} keyframes in +-10s horizon`;
 
       frames.forEach(f => {
         const card = document.createElement('div');
@@ -1794,20 +1888,44 @@
   // =========================================================================
 
   function handleGlobalKeydown(e) {
-    // Modal is open hotkeys take top priority
-    if (state.isVideoModalOpen) {
-      if (e.key === 'Escape') {
+    const isEditableInput =
+      (e.target.tagName === 'INPUT' && e.target.type !== 'range') ||
+      e.target.tagName === 'TEXTAREA' ||
+      e.target.tagName === 'SELECT';
+
+    if (e.key === 'Escape') {
+      if (dom.timerDetailsPopover && !dom.timerDetailsPopover.classList.contains('hidden')) {
+        dom.timerDetailsPopover.classList.add('hidden');
+        e.preventDefault();
+        return;
+      }
+      if (state.isVideoModalOpen) {
         closeVideoModal();
         e.preventDefault();
         return;
       }
-
-      // Ignore text typing ONLY for actual editable text boxes, never range slider
-      const isEditableText = (e.target.tagName === 'INPUT' && e.target.type !== 'range') || e.target.tagName === 'TEXTAREA';
-      if (isEditableText) {
-        return;
+      if (isEditableInput) {
+        e.target.blur();
       }
+      return;
+    }
 
+    if (isEditableInput) {
+      if (e.key === 'Enter' && e.target === dom.queryInput) {
+        executeSearch();
+      }
+      return;
+    }
+
+    if (e.key === '/') {
+      e.preventDefault();
+      dom.queryInput.focus();
+      dom.queryInput.select();
+      return;
+    }
+
+    const playerActive = state.isVideoModalOpen || (state.layoutMode === 'docked' && Boolean(state.activeVideoId));
+    if (playerActive) {
       const k = e.key;
       if (k === ' ') {
         togglePlayPause();
@@ -1841,22 +1959,7 @@
       return;
     }
 
-    // Outside Modal Hotkeys
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-      if (e.key === 'Escape') {
-        e.target.blur();
-      }
-      if (e.key === 'Enter' && e.target === dom.queryInput) {
-        executeSearch();
-      }
-      return;
-    }
-
-    if (e.key === '/') {
-      e.preventDefault();
-      dom.queryInput.focus();
-      dom.queryInput.select();
-    } else if (e.key === 's' || e.key === 'S') {
+    if (e.key === 's' || e.key === 'S') {
       submitCurrentTargetRange();
       e.preventDefault();
     }
@@ -2050,10 +2153,29 @@
     dom.saveDresConfigBtn.addEventListener('click', saveDresConfiguration);
     dom.clearDresCacheBtn.addEventListener('click', clearDresCache);
 
-    // Layout Toggle
+    // Layout Toggle & Docked Inspector Controls
     dom.toggleDockedLayoutBtn.addEventListener('click', toggleDockedLayout);
     dom.modalDockToggleBtn.addEventListener('click', toggleDockedLayout);
-    dom.closeDockedPlayerBtn.addEventListener('click', closeVideoModal);
+    if (dom.expandPopupBtn) {
+      dom.expandPopupBtn.addEventListener('click', expandDockedToPopup);
+    }
+    dom.closeDockedPlayerBtn.addEventListener('click', () => {
+      dom.modalVideoPlayer.pause();
+      dom.dockedPlayerPanel.classList.add('hidden');
+    });
+
+    // Header Timer Popover Toggle
+    if (dom.timerDetailsBtn && dom.timerDetailsPopover) {
+      dom.timerDetailsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dom.timerDetailsPopover.classList.toggle('hidden');
+      });
+      document.addEventListener('click', (e) => {
+        if (dom.headerTimerWrapper && !dom.headerTimerWrapper.contains(e.target)) {
+          dom.timerDetailsPopover.classList.add('hidden');
+        }
+      });
+    }
 
     // VRAM Unload
     dom.unloadVramBtn.addEventListener('click', async () => {
@@ -2148,6 +2270,7 @@
       dom.videoTimelineSlider.max = player.duration;
       dom.modalTimeIndicator.textContent = `${formatTime(player.currentTime)} / ${formatTime(player.duration)}`;
       updateTimelineHighlight();
+      renderTimelineHitMarkers(state.activeVideoId);
     });
 
     player.addEventListener('waiting', () => {
@@ -2175,6 +2298,14 @@
 
   async function init() {
     console.log('[KIS Workstation] Initializing application...');
+    if (state.layoutMode === 'docked') {
+      attachPlayerToDocked();
+      if (dom.layoutModeLabel) dom.layoutModeLabel.textContent = 'Cockpit';
+      if (dom.dockedPlayerPanel) dom.dockedPlayerPanel.classList.remove('hidden');
+    } else {
+      if (dom.layoutModeLabel) dom.layoutModeLabel.textContent = 'Popup';
+      if (dom.dockedPlayerPanel) dom.dockedPlayerPanel.classList.add('hidden');
+    }
     loadViewMode();
     loadAllowedBatches();
     updateExcludedVideosUI();

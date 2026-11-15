@@ -50,6 +50,44 @@
 
       <!-- Right Header Actions -->
       <div class="header-actions">
+        <!-- Task 07D: Compact Top-Header Timer & Score Capsule -->
+        <div class="header-timer-wrapper" id="headerTimerWrapper">
+          <div class="header-timer-capsule" id="headerTimerCapsule">
+            <span class="header-clock" id="stopwatchClock">00:00</span>
+            <span class="header-clock-sep">/</span>
+            <span class="header-clock-limit" id="clockLimitLabel">05:00</span>
+            <button id="timerStartPauseBtn" class="btn-timer-mini primary" type="button" title="Start / Pause Stopwatch">Start</button>
+            <button id="timerResetBtn" class="btn-timer-mini" type="button" title="Reset Stopwatch">Reset</button>
+            <button id="addWrongAttemptBtn" class="btn-timer-mini danger" type="button" title="Record Wrong Attempt (-10 pts)">+1W (<span id="wrongAttemptsCounter">0</span>)</button>
+            <button id="timerDetailsBtn" class="btn-timer-score" type="button" title="Toggle Predicted Score & Task Mode details">
+              <span id="predictedTotalScore">100.0 pts</span>
+            </button>
+          </div>
+
+          <div class="timer-details-popover hidden" id="timerDetailsPopover">
+            <div class="popover-row-head">
+              <span class="section-tag">SCORE &amp; TASK MODE</span>
+              <div class="task-mode-toggle">
+                <button id="taskModeTextual" class="btn-task-mode active" type="button" title="Textual KIS (5 min limit)">Text (300s)</button>
+                <button id="taskModeVideo" class="btn-task-mode" type="button" title="Video KIS (4 min limit)">Video (240s)</button>
+              </div>
+            </div>
+            <div class="score-breakdown">
+              <div class="breakdown-item">
+                <span class="breakdown-title">Accuracy:</span>
+                <span class="breakdown-val" id="predictedAccScore">50.0 pts</span>
+              </div>
+              <div class="breakdown-item">
+                <span class="breakdown-title">Time Bonus:</span>
+                <span class="breakdown-val" id="predictedTimeScore">50.0 pts</span>
+              </div>
+            </div>
+            <div class="wrong-attempt-actions">
+              <button id="resetWrongAttemptsBtn" class="btn-wrong-reset" type="button">Reset Wrong Count</button>
+            </div>
+          </div>
+        </div>
+
         <div id="dresConnectionPill" class="dres-status-pill dry-run" title="DRES Client Connection Status">
           <span class="pill-dot"></span>
           <span id="dresStatusText">DRY-RUN</span>
@@ -59,8 +97,8 @@
           DRES Config
         </button>
 
-        <button id="toggleDockedLayoutBtn" class="btn-header-secondary" title="Toggle between floating pop-up player and docked split view">
-          Layout: <span id="layoutModeLabel">Popup</span>
+        <button id="toggleDockedLayoutBtn" class="btn-header-secondary" title="Toggle between Cockpit split inspector and Pop-up modal">
+          Layout: <span id="layoutModeLabel">Cockpit</span>
         </button>
 
         <button id="unloadVramBtn" class="btn-header-danger" title="Unload SigLIP2 model from GPU memory">
@@ -195,135 +233,10 @@
     </div>
   </div>
 
-  <!-- MAIN WORKSTATION WORKSPACE (DUAL-ZONE LAYOUT) -->
+  <!-- MAIN WORKSTATION WORKSPACE (ZERO-POPUP SPLIT COCKPIT LAYOUT: ~65% SCAN | ~35% VERIFY & SUBMIT) -->
   <main class="workstation-workspace" id="workstationWorkspace">
 
-    <!-- LEFT DOCKED SIDEBAR: KIS COMMAND CENTER -->
-    <aside class="kis-command-sidebar" id="kisCommandSidebar">
-
-      <!-- SECTION 1: STOPWATCH & SCORE SIMULATOR -->
-      <section class="sidebar-card competition-stopwatch-card">
-        <div class="card-header">
-          <span class="section-tag">COMPETITION TIMER</span>
-          <div class="task-mode-toggle">
-            <button id="taskModeTextual" class="btn-task-mode active" title="Textual KIS (5 min limit)">Text (300s)</button>
-            <button id="taskModeVideo" class="btn-task-mode" title="Video KIS (4 min limit)">Video (240s)</button>
-          </div>
-        </div>
-
-        <div class="stopwatch-display">
-          <div class="digital-clock" id="stopwatchClock">00:00</div>
-          <div class="clock-limit-label">Limit: <span id="clockLimitLabel">05:00</span></div>
-        </div>
-
-        <div class="stopwatch-controls">
-          <button id="timerStartPauseBtn" class="btn-timer-primary">Start Timer</button>
-          <button id="timerResetBtn" class="btn-timer-secondary">Reset</button>
-        </div>
-
-        <!-- Score Decay Simulator -->
-        <div class="score-decay-box">
-          <div class="score-decay-header">
-            <span class="score-label">PREDICTED SCORE</span>
-            <span class="score-total" id="predictedTotalScore">100.0 pts</span>
-          </div>
-          <div class="score-breakdown">
-            <div class="breakdown-item">
-              <span class="breakdown-title">Accuracy:</span>
-              <span class="breakdown-val" id="predictedAccScore">50.0 pts</span>
-            </div>
-            <div class="breakdown-item">
-              <span class="breakdown-title">Time Bonus:</span>
-              <span class="breakdown-val" id="predictedTimeScore">50.0 pts</span>
-            </div>
-            <div class="breakdown-item">
-              <span class="breakdown-title">Wrong Hits:</span>
-              <span class="breakdown-val highlight-danger" id="wrongAttemptsCounter">0</span>
-            </div>
-          </div>
-          <div class="wrong-attempt-actions">
-            <button id="addWrongAttemptBtn" class="btn-wrong-add">+1 Wrong (-10 pts)</button>
-            <button id="resetWrongAttemptsBtn" class="btn-wrong-reset">Reset Wrong</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 2: ACTIVE SUBMISSION TARGET -->
-      <section class="sidebar-card submission-target-card">
-        <div class="card-header">
-          <span class="section-tag">TARGET COORDINATES</span>
-          <span class="target-status-badge" id="targetStatusBadge">No Target Selected</span>
-        </div>
-
-        <div class="target-details-grid">
-          <div class="target-field">
-            <span class="field-label">VIDEO ID</span>
-            <input type="text" id="targetVideoId" class="target-input" placeholder="e.g. L05_V014" spellcheck="false">
-          </div>
-          <div class="target-field">
-            <span class="field-label">DURATION</span>
-            <span class="target-value duration" id="targetDurationVal">0.00s</span>
-          </div>
-          <div class="target-field">
-            <span class="field-label">START (SEC)</span>
-            <input type="number" id="targetStartSec" class="target-input-num" step="0.04" min="0" value="0.00">
-          </div>
-          <div class="target-field">
-            <span class="field-label">END (SEC)</span>
-            <input type="number" id="targetEndSec" class="target-input-num" step="0.04" min="0" value="0.00">
-          </div>
-        </div>
-
-        <div class="target-ms-preview">
-          Bounds: <span class="ms-code" id="targetMsBounds">0ms - 0ms</span>
-        </div>
-
-        <!-- Presets -->
-        <div class="preset-buttons-row">
-          <button id="presetTightBtn" class="btn-preset" title="Tight 1.0s window (+-0.5s around center)">Tight +-0.5s</button>
-          <button id="presetShotBtn" class="btn-preset" title="Exact detected shot interval">Shot Bounds</button>
-          <button id="presetWindowBtn" class="btn-preset" title="Standard 5.0s window (+-2.5s around center)">Window +-2.5s</button>
-        </div>
-
-        <!-- Submission Options -->
-        <div class="submission-options-row">
-          <label class="sub-checkbox">
-            <input type="checkbox" id="subDryRunCheck">
-            <span>Dry-run simulation</span>
-          </label>
-          <label class="sub-checkbox">
-            <input type="checkbox" id="subAllowDuplicateCheck">
-            <span>Allow duplicate</span>
-          </label>
-        </div>
-
-        <!-- Primary Submission Action -->
-        <div class="submission-actions">
-          <button id="submitTargetRangeBtn" class="btn-submit-primary">
-            <span class="btn-icon">🚀</span>
-            <span class="btn-title">SUBMIT TARGET RANGE</span>
-          </button>
-          <button id="quickSubmitPlayheadBtn" class="btn-submit-secondary" title="Submit playhead +-0.5s (Hotkey S)">
-            <span class="btn-icon">⚡</span>
-            <span>SUBMIT PLAYHEAD +-0.5s (S)</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- SECTION 3: REAL-TIME SUBMISSION STREAM -->
-      <section class="sidebar-card submission-history-card">
-        <div class="card-header">
-          <span class="section-tag">SUBMISSION STREAM</span>
-          <span class="history-count-badge" id="historyCountBadge">0 submissions</span>
-        </div>
-        <div class="submission-history-feed" id="submissionHistoryFeed">
-          <div class="history-empty-placeholder">No submissions recorded in this session.</div>
-        </div>
-      </section>
-
-    </aside>
-
-    <!-- RIGHT MAIN CANVAS: HIGH-DENSITY FRAME GRID -->
+    <!-- LEFT MAIN CANVAS: HIGH-DENSITY FRAME GRID / VIDEO STRIPS -->
     <section class="candidate-canvas-main" id="candidateCanvasMain">
 
       <!-- Task 06D & 07A: Query Accelerators Bar & Multi-Stage Sequence Builder -->
@@ -425,16 +338,94 @@
 
     </section>
 
-    <!-- DOCKED PLAYER PANEL (PINNED MODE) -->
-    <div id="dockedPlayerPanel" class="docked-player-panel hidden">
+    <!-- RIGHT PERSISTENT COCKPIT INSPECTOR (~35% WIDTH) -->
+    <aside id="dockedPlayerPanel" class="docked-player-panel">
       <div class="docked-player-header">
-        <span class="docked-title" id="dockedPlayerTitle">Video Player</span>
-        <button id="closeDockedPlayerBtn" class="btn-close-docked">X</button>
+        <span class="docked-title" id="dockedPlayerTitle">Inspector: Select any card to preview</span>
+        <div class="docked-header-actions">
+          <button id="expandPopupBtn" type="button" class="btn-dock-action" title="Expand inspector to full-screen Popup Modal">Popup</button>
+          <button id="closeDockedPlayerBtn" type="button" class="btn-close-docked" title="Pause and hide docked inspector">Hide</button>
+        </div>
       </div>
-      <div class="docked-player-container" id="dockedPlayerContainer">
-        <!-- Video element dynamically moved here in docked mode -->
+
+      <div class="docked-player-scroll">
+        <div class="docked-player-container" id="dockedPlayerContainer">
+          <!-- Video element, transport bar & inline +-10s filmstrip mounted here in Cockpit mode -->
+        </div>
+
+        <!-- Persistent Verify & Submit Dock -->
+        <div class="cockpit-submit-dock" id="cockpitSubmitDock">
+          <section class="sidebar-card submission-target-card">
+            <div class="card-header">
+              <span class="section-tag">TARGET COORDINATES</span>
+              <span class="target-status-badge" id="targetStatusBadge">No Target Selected</span>
+            </div>
+
+            <div class="target-details-grid">
+              <div class="target-field">
+                <span class="field-label">VIDEO ID</span>
+                <input type="text" id="targetVideoId" class="target-input" placeholder="e.g. L05_V014" spellcheck="false">
+              </div>
+              <div class="target-field">
+                <span class="field-label">DURATION</span>
+                <span class="target-value duration" id="targetDurationVal">0.00s</span>
+              </div>
+              <div class="target-field">
+                <span class="field-label">START (SEC)</span>
+                <input type="number" id="targetStartSec" class="target-input-num" step="0.04" min="0" value="0.00">
+              </div>
+              <div class="target-field">
+                <span class="field-label">END (SEC)</span>
+                <input type="number" id="targetEndSec" class="target-input-num" step="0.04" min="0" value="0.00">
+              </div>
+            </div>
+
+            <div class="target-ms-preview">
+              Bounds: <span class="ms-code" id="targetMsBounds">0ms - 0ms</span>
+            </div>
+
+            <!-- Presets -->
+            <div class="preset-buttons-row">
+              <button id="presetTightBtn" class="btn-preset" title="Tight 1.0s window (+-0.5s around center)">Tight +-0.5s</button>
+              <button id="presetShotBtn" class="btn-preset" title="Exact detected shot interval">Shot Bounds</button>
+              <button id="presetWindowBtn" class="btn-preset" title="Standard 5.0s window (+-2.5s around center)">Window +-2.5s</button>
+            </div>
+
+            <!-- Submission Options -->
+            <div class="submission-options-row">
+              <label class="sub-checkbox">
+                <input type="checkbox" id="subDryRunCheck">
+                <span>Dry-run simulation</span>
+              </label>
+              <label class="sub-checkbox">
+                <input type="checkbox" id="subAllowDuplicateCheck">
+                <span>Allow duplicate</span>
+              </label>
+            </div>
+
+            <!-- Primary Submission Action -->
+            <div class="submission-actions">
+              <button id="quickSubmitPlayheadBtn" class="btn-submit-secondary" title="Submit playhead +-0.5s (Hotkey S)">
+                <span>SUBMIT PLAYHEAD (S)</span>
+              </button>
+              <button id="submitTargetRangeBtn" class="btn-submit-primary">
+                <span class="btn-title">SUBMIT RANGE</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="sidebar-card submission-history-card">
+            <div class="card-header">
+              <span class="section-tag">SUBMISSION STREAM</span>
+              <span class="history-count-badge" id="historyCountBadge">0 submissions</span>
+            </div>
+            <div class="submission-history-feed" id="submissionHistoryFeed">
+              <div class="history-empty-placeholder">No submissions recorded in this session.</div>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </aside>
 
   </main>
 
@@ -470,9 +461,10 @@
 
         <!-- Video Transport Timeline & Scrub Controls -->
         <div class="player-transport-bar" id="playerTransportBar">
-          <div class="transport-scrubber-wrapper">
+          <div class="transport-scrubber-wrapper" id="transportScrubberWrapper">
             <input type="range" id="videoTimelineSlider" class="timeline-slider" min="0" max="100" step="0.04" value="0">
             <div class="timeline-range-highlight" id="timelineRangeHighlight"></div>
+            <div class="timeline-hit-markers" id="timelineHitMarkers"></div>
           </div>
 
           <div class="transport-controls-row">
@@ -506,11 +498,11 @@
           </div>
         </div>
 
-        <!-- Temporal Context Filmstrip Drawer (+-15s) -->
+        <!-- Temporal Context Filmstrip Drawer (+-10s) -->
         <div class="modal-filmstrip-section" id="modalFilmstripSection">
           <div class="filmstrip-header">
-            <span class="filmstrip-title">TEMPORAL CONTEXT FILMSTRIP (+-15s Neighbor Keyframes)</span>
-            <span class="filmstrip-status" id="filmstripStatus">Loading neighbor frames...</span>
+            <span class="filmstrip-title">NEIGHBOR FILMSTRIP (+-10s Keyframes)</span>
+            <span class="filmstrip-status" id="filmstripStatus">Select a video to load neighbor frames</span>
           </div>
           <div class="filmstrip-carousel" id="filmstripCarousel">
             <!-- Filmstrip cards loaded dynamically -->
