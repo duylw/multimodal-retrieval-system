@@ -18,6 +18,7 @@ Before writing code or performing tasks, the AI assistant **must check in order 
    * Module layering, engine-runner separation, and CLI standards: Activate **`modular-code-architecture`** ([.agents/skills/modular-code-architecture/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/modular-code-architecture/SKILL.md)).
    * Python clean code, typing, and IR design patterns: Activate **`clean-code-patterns`** ([.agents/skills/clean-code-patterns/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/clean-code-patterns/SKILL.md)).
    * Feature documentation & CLI guides: Activate **`feature-documentation-guide`** ([.agents/skills/feature-documentation-guide/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/feature-documentation-guide/SKILL.md)).
+   * Command safety, auto-accept guardrails, and non-destructive execution: Activate **`command-execution-safety`** ([.agents/skills/command-execution-safety/SKILL.md](file:///d:/UIT/TX/doan/.agents/skills/command-execution-safety/SKILL.md)).
 4. **Reference Config & Schema:** Load parameters from [configs/default_config.yaml](file:///d:/UIT/TX/doan/configs/default_config.yaml) and reuse interfaces/dataclasses in [src/common/](file:///d:/UIT/TX/doan/src/common).
 
 ---
@@ -50,4 +51,21 @@ Before writing code or performing tasks, the AI assistant **must check in order 
 ## 6. UI Testing Protocol (No Automated Browser Subagents)
 * **No Automated Browser Subagents Rule:** Never spawn or invoke automated browser subagents (`browser_subagent`) to test web UIs in Chrome. Automated browser subagents consume excessive time, memory, and token budget.
 * **User-Driven Manual UI Testing:** When UI verification is required, the assistant must provide concise manual test steps, expected behaviors, and direct URLs (e.g. `http://127.0.0.1:8000`) in chat. The user will test the interface directly in their browser and report back observations, console logs, or visual errors for the assistant to resolve.
+
+---
+
+## 7. Command Execution Safety Protocol (Auto-Accept Safety Guards)
+* **Workspace Isolation:** Shell commands must execute strictly within the project repository [d:\UIT\TX\doan](file:///d:/UIT/TX/doan). Never access, manipulate, or delete files outside this directory, system folders, or OS registry.
+* **Prohibited Command Blacklist:** The assistant must never execute the following destructive commands under auto-accept:
+  * Bulk or wildcard directory removals: `rmdir /s /q`, `del /s /q *`, `Remove-Item -Recurse -Force <dir>`, `rm -rf`.
+  * Destructive Git commands: `git push --force`, `git push -f`, `git reset --hard`, `git clean -fdx`, `git checkout -- .`, `git restore .`.
+  * Untracked branch deletion: `git branch -D <branch>`.
+  * Blanket Git staging: `git add .`, `git add -A`, `git commit -a` (stage specific modified files explicitly).
+  * System/disk tools: `format`, `diskpart`, `chkdsk /f`, `reg delete`, or killing Windows OS processes.
+  * Global package managers: `pip install ...`, `conda install ...` (always use `uv`).
+  * Remote script execution: `curl ... | iex` or piping downloaded scripts directly to shell.
+* **Protected Assets:** Never delete or overwrite [data/raw_videos/](file:///d:/UIT/TX/doan/data/raw_videos), [data/keyframes/](file:///d:/UIT/TX/doan/data/keyframes), [data/features/](file:///d:/UIT/TX/doan/data/features), [data/metadata.db](file:///d:/UIT/TX/doan/data/metadata.db), [data/indices/](file:///d:/UIT/TX/doan/data/indices), or [.git/](file:///d:/UIT/TX/doan/.git).
+* **Batch Execution Guard:** Always test extraction, embedding, or indexing runners on a single sample video before executing across the entire dataset.
+* **Safe Alternatives Required:** Use dry-run modes (`git clean -ndx`), safe stash (`git stash push -m`), and explicit target paths for any file operation.
+
 
